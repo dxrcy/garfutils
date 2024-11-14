@@ -7,3 +7,5 @@ edition = "2021"
 chrono = "0.4.38"
 clap = { version = "4.5.21", features = ["derive"] }
 rand = "0.8.5"
+
+comic-format = { path = "../comic-format" }

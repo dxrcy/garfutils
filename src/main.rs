@@ -5,16 +5,20 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
 
 fn main() {
     let args = args::Args::parse();
 
+    // TODO(feat): Use user's home directory
+    // TODO(feat): Make customizable
     let dir_config = DirConfig {
         original_comics_dir: PathBuf::from("/home/darcy/pics/garfield"),
         recently_shown_file: PathBuf::from("/home/darcy/.cache/garfutils.recent"),
+        generated_posts_dir: PathBuf::from("/home/darcy/pics/eo/unedited"),
+        completed_posts_dir: PathBuf::from("/home/darcy/code/garfeo/assets/posts"),
     };
 
     match args.command {
@@ -28,24 +32,9 @@ fn main() {
             name,
             skip_check,
         } => {
-            let date = if recent {
-                assert!(
-                    date.is_none(),
-                    "date should be `None` with `--recent` (cli parsing is broken)"
-                );
-                // TODO(feat/error): Handle better
-                match get_recent_date(&dir_config).unwrap() {
-                    Some(date) => date,
-                    None => {
-                        eprintln!("no recent comic.");
-                        return;
-                    }
-                }
-            } else {
-                date.expect("date should be `Some` without `--recent` (cli parsing is broken)")
-            };
-            println!("date: {}", date);
-            todo!("make");
+            let date = get_date(&dir_config, date, recent);
+            let name = name.unwrap_or_else(|| get_unique_name(date));
+            make_post(&dir_config, date, &name, skip_check);
         }
 
         args::Command::Revise { .. } => todo!(),
@@ -54,9 +43,114 @@ fn main() {
     }
 }
 
+fn get_unique_name(date: NaiveDate) -> String {
+    use std::fmt::Write;
+
+    const CODE_LENGTH: usize = 4;
+    const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-mm-dd".len();
+
+    let mut rng = rand::thread_rng();
+
+    let mut name = String::with_capacity(STRING_LENGTH);
+
+    let char_set = if date.weekday() == chrono::Weekday::Sun {
+        'A'..='Z'
+    } else {
+        'a'..='z'
+    };
+
+    for _ in 0..CODE_LENGTH {
+        let letter: char = rng.gen_range(char_set.clone());
+        name.push(letter);
+    }
+
+    // Avoid unnecessary temporary string allocation
+    write!(name, ":{}", date.format("%Y-%m-%d")).expect("write to string should not fail");
+
+    name
+}
+
+fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str, skip_check: bool) {
+    println!("date: {}", date);
+    println!("name: {}", name);
+
+    let comic_path = dir_config
+        .original_comics_dir
+        .join(date.to_string() + ".png");
+
+    if !comic_path.exists() {
+        // TODO(feat/error): Handle better
+        panic!("not the date of a real comic");
+    }
+
+    println!("comic_path: {:?}", comic_path);
+
+    if !dir_config.generated_posts_dir.exists() {
+        // TODO(feat/error): Handle better
+        fs::create_dir_all(&dir_config.generated_posts_dir).expect("failed to create directory");
+    }
+
+    if !skip_check {
+        if exists_post_with_date(&dir_config.generated_posts_dir, date) {
+            panic!("already exists incomplete post with that date");
+        }
+        if exists_post_with_date(&dir_config.completed_posts_dir, date) {
+            panic!("already exists completed post with that date");
+        }
+    }
+
+    todo!("make");
+}
+
+/// Skips entries with missing or malformed date file
+fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> bool {
+    // TODO(feat/error): Handle better
+    let entries = fs::read_dir(dir).expect("failed to read directory");
+
+    for entry in entries {
+        // TODO(feat/error): Handle better
+        let entry = entry.expect("failed to read entry");
+
+        let date_file_path = entry.path().join("date");
+        if !date_file_path.exists() {
+            continue;
+        }
+
+        // TODO(feat/error): Handle better
+        let date_file = fs::read_to_string(date_file_path).expect("failed to read date file");
+        let Ok(existing_date) = NaiveDate::parse_from_str(&date_file, "%Y-%m-%d") else {
+            continue;
+        };
+        if existing_date == date {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> NaiveDate {
+    if !recent {
+        return date.expect("date should be `Some` without `--recent` (cli parsing is broken)");
+    }
+
+    assert!(
+        date.is_none(),
+        "date should be `None` with `--recent` (cli parsing is broken)"
+    );
+    // TODO(feat/error): Handle better
+    let Some(date) = get_recent_date(&dir_config).unwrap() else {
+        // TODO(feat/error): Handle better
+        panic!("no recent comic.");
+    };
+    return date;
+}
+
 struct DirConfig {
     pub original_comics_dir: PathBuf,
     pub recently_shown_file: PathBuf,
+    pub generated_posts_dir: PathBuf,
+    pub completed_posts_dir: PathBuf,
 }
 
 macro_rules! command {
