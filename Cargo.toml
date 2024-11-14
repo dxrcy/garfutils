@@ -10,5 +10,4 @@ rand = "0.8.5"
 image = "0.24.7"
 dirs-next = "2.0.0"
 anyhow = "1.0.93"
-
-comic-format = { path = "../comic-format" }
+comic-format = { git = "https://github.com/dxrcy/comic-format" }

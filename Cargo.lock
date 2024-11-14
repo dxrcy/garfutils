@@ -219,6 +219,7 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 [[package]]
 name = "comic-format"
 version = "0.1.0"
+source = "git+https://github.com/dxrcy/comic-format#bda82b857f7293b934e24685d71c207e3cf1b902"
 dependencies = [
  "clap",
  "image",
