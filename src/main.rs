@@ -13,11 +13,11 @@ fn main() {
     let args = args::Args::parse();
 
     // TODO(feat): Use user's home directory
-    // TODO(feat): Make customizable
+    // TODO(feat): Perhaps make customizable
     let dir_config = DirConfig {
         original_comics_dir: PathBuf::from("/home/darcy/pics/garfield"),
         recently_shown_file: PathBuf::from("/home/darcy/.cache/garfutils.recent"),
-        generated_posts_dir: PathBuf::from("/home/darcy/pics/eo/unedited"),
+        generated_posts_dir: PathBuf::from("/home/darcy/pics/eo/unedited2"),
         completed_posts_dir: PathBuf::from("/home/darcy/code/garfeo/assets/posts"),
     };
 
@@ -35,6 +35,7 @@ fn main() {
             let date = get_date(&dir_config, date, recent);
             let name = name.unwrap_or_else(|| get_unique_name(date));
             make_post(&dir_config, date, &name, skip_check);
+            println!("Created {}", name);
         }
 
         args::Command::Revise { .. } => todo!(),
@@ -49,6 +50,7 @@ fn get_unique_name(date: NaiveDate) -> String {
     const CODE_LENGTH: usize = 4;
     const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-mm-dd".len();
 
+    // TODO(refactor): Share rng
     let mut rng = rand::thread_rng();
 
     let mut name = String::with_capacity(STRING_LENGTH);
@@ -71,19 +73,24 @@ fn get_unique_name(date: NaiveDate) -> String {
 }
 
 fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str, skip_check: bool) {
-    println!("date: {}", date);
-    println!("name: {}", name);
-
-    let comic_path = dir_config
+    let original_comic_path = dir_config
         .original_comics_dir
         .join(date.to_string() + ".png");
+    let generated_dir = dir_config.generated_posts_dir.join(name);
+    // TODO(refactor): Define file names as constants
+    let title_file_path = generated_dir.join("title");
+    let date_file_path = generated_dir.join("date");
+    let generated_comic_path = generated_dir.join("english.png");
+    let duplicate_comic_path = generated_dir.join("esperanto.png");
+    // TODO(feat): Move icon file: Either to this crate or some location defined by dir_config
+    let icon_path = Path::new("../comic-format/icon.png");
 
-    if !comic_path.exists() {
+    let watermark = get_random_watermark();
+
+    if !original_comic_path.exists() {
         // TODO(feat/error): Handle better
         panic!("not the date of a real comic");
     }
-
-    println!("comic_path: {:?}", comic_path);
 
     if !dir_config.generated_posts_dir.exists() {
         // TODO(feat/error): Handle better
@@ -99,7 +106,49 @@ fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str, skip_check: bo
         }
     }
 
-    todo!("make");
+    // TODO(feat/error): Handle better
+    // Parent should already be created
+    fs::create_dir(&generated_dir).expect("failed to create directory");
+
+    // TODO(feat/error): Handle better
+    fs::write(date_file_path, date.to_string()).expect("failed to write date file");
+
+    // TODO(feat/error): Handle better
+    fs::File::create(title_file_path).expect("failed to create title file");
+
+    // TODO(feat/error): Handle better
+    let icon = image::open(icon_path).expect("failed to open icon image");
+    // TODO(feat/error): Handle better
+    let original_comic = image::open(original_comic_path).expect("failed to open comic");
+    let generated_comic = comic_format::convert_image(original_comic, &icon, watermark, 0.0);
+
+    // TODO(feat/error): Handle better
+    generated_comic
+        .save(&generated_comic_path)
+        .expect("failed to save comic");
+
+    // TODO(feat/error): Handle better
+    fs::copy(&generated_comic_path, &duplicate_comic_path).expect("failed to copy comic");
+}
+
+fn get_random_watermark() -> &'static str {
+    // TODO(refactor): Share rng
+    let mut rng = rand::thread_rng();
+
+    const WATERMARKS: &[&str] = &[
+        "GarfEO",
+        "@garfield.eo.v2",
+        "@garfieldeo@mastodon.world",
+        "Garfield-EO",
+        "garfeo",
+        "Garfeo",
+        "Garfield Esperanto",
+        "Garfildo Esperanta",
+        "Esperanta Garfield",
+        "garf-eo",
+    ];
+
+    return WATERMARKS[rng.gen_range(0..WATERMARKS.len())];
 }
 
 /// Skips entries with missing or malformed date file
@@ -118,7 +167,7 @@ fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> bool {
 
         // TODO(feat/error): Handle better
         let date_file = fs::read_to_string(date_file_path).expect("failed to read date file");
-        let Ok(existing_date) = NaiveDate::parse_from_str(&date_file, "%Y-%m-%d") else {
+        let Ok(existing_date) = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d") else {
             continue;
         };
         if existing_date == date {
@@ -191,6 +240,7 @@ where
 }
 
 fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) {
+    // TODO(refactor): Share rng
     let mut rng = rand::thread_rng();
 
     let (date, path) = match date {
