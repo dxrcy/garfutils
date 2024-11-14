@@ -9,16 +9,69 @@ use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
 
+fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig, ()> {
+    const ORIGINAL_COMICS_NAME: &str = "comics";
+    const GENERATED_POSTS_NAME: &str = "generated";
+    const COMPLETED_POSTS_NAME: &str = "completed";
+    const LOCATION_NAME: &str = "garfutils";
+    const CACHE_FILE_NAME: &str = "garfutils.recent";
+
+    let location = location
+        .or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
+        .ok_or_else(|| {
+            eprintln!(
+                "Failed to read standard data location.\n\
+                For *nix systems, try setting `$XDG_DATA_HOME` or `$HOME` environment variables.\n\
+                Alternatively, run this program with the `--location <LOCATION>` option."
+            );
+        })?;
+
+    let cache_file = cache_file
+        .or_else(|| dirs_next::cache_dir().map(|dir| dir.join(CACHE_FILE_NAME)))
+        .ok_or_else(|| {
+            eprintln!(
+                "Failed to read standard cache location.\n\
+                For *nix systems, try setting `$XDG_CACHE_HOME` or `$HOME` environment variables.\n\
+                Alternatively, run this program with the `--cache-file <CACHE_FILE>` option."
+            );
+        })?;
+
+    let dir_config = DirConfig {
+        original_comics_dir: location.join(ORIGINAL_COMICS_NAME),
+        generated_posts_dir: location.join(GENERATED_POSTS_NAME),
+        completed_posts_dir: location.join(COMPLETED_POSTS_NAME),
+        recently_shown_file: cache_file,
+    };
+
+    if !location.exists() || !location.is_dir() {
+        eprintln!("Location is not a directory: `{:?}`.", location);
+        eprintln!("Please create the directory with sub-directories `comics`, `generated`, and `completed`, each of which may be symlinks.");
+        return Err(());
+    }
+
+    for (path, name) in [
+        (&dir_config.original_comics_dir, ORIGINAL_COMICS_NAME),
+        (&dir_config.generated_posts_dir, GENERATED_POSTS_NAME),
+        (&dir_config.completed_posts_dir, COMPLETED_POSTS_NAME),
+    ] {
+        if !path.exists() || !path.is_dir() {
+            eprintln!("Location is missing sub-directory: `{}`", name);
+            eprintln!(
+                "Please create the directory with sub-directories `{}` which may be symlink.",
+                name,
+            );
+            return Err(());
+        }
+    }
+
+    Ok(dir_config)
+}
+
 fn main() {
     let args = args::Args::parse();
 
-    // TODO(feat): Use user's home directory
-    // TODO(feat): Perhaps make customizable
-    let dir_config = DirConfig {
-        original_comics_dir: PathBuf::from("/home/darcy/pics/garfield"),
-        recently_shown_file: PathBuf::from("/home/darcy/.cache/garfutils.recent"),
-        generated_posts_dir: PathBuf::from("/home/darcy/pics/eo/unedited2"),
-        completed_posts_dir: PathBuf::from("/home/darcy/code/garfeo/assets/posts"),
+    let Ok(dir_config) = get_dir_config(args.location, args.cache_file) else {
+        std::process::exit(1);
     };
 
     match args.command {
@@ -33,7 +86,7 @@ fn main() {
             println!("Created {}", name);
         }
 
-        args::Command::Revise { .. } => todo!(),
+        args::Command::Revise { .. } => {}
 
         args::Command::Transcribe { .. } => todo!(),
     }

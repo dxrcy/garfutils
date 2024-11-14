@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use chrono::NaiveDate;
 use clap::{ArgGroup, Parser, Subcommand};
 
@@ -9,6 +11,18 @@ use clap::{ArgGroup, Parser, Subcommand};
 pub struct Args {
     #[command(subcommand)]
     pub command: Command,
+    /// Parent directory of input and output directories
+    ///
+    /// Default: `$XDG_DATA_HOME/garfutils` or `$HOME/.local/share/garfutils`
+    ///
+    /// Expects sub-directories `comics`, `generated`, `completed`, each of which may be symlinks
+    #[arg(long)]
+    pub location: Option<PathBuf>,
+    /// Cache file path
+    ///
+    /// Default: `$XDG_CONFIG_HOME/garfutils.recent` or `$HOME/.cache/garfutils.recent`
+    #[arg(long)]
+    pub cache_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
