@@ -5,36 +5,37 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use anyhow::{bail, Context, Result};
 use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
 
-fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig, ()> {
+fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
     const ORIGINAL_COMICS_NAME: &str = "comics";
     const GENERATED_POSTS_NAME: &str = "generated";
     const COMPLETED_POSTS_NAME: &str = "completed";
     const LOCATION_NAME: &str = "garfutils";
     const CACHE_FILE_NAME: &str = "garfutils.recent";
 
-    let location = location
-        .or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
-        .ok_or_else(|| {
-            eprintln!(
-                "Failed to read standard data location.\n\
-                For *nix systems, try setting `$XDG_DATA_HOME` or `$HOME` environment variables.\n\
-                Alternatively, run this program with the `--location <LOCATION>` option."
-            );
-        })?;
+    let Some(location) =
+        location.or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
+    else {
+        bail!(
+            "Failed to read standard data location.\n\
+            For *nix systems, try setting `$XDG_DATA_HOME` or `$HOME` environment variables.\n\
+            Alternatively, run this program with the `--location <LOCATION>` option."
+        );
+    };
 
-    let cache_file = cache_file
-        .or_else(|| dirs_next::cache_dir().map(|dir| dir.join(CACHE_FILE_NAME)))
-        .ok_or_else(|| {
-            eprintln!(
-                "Failed to read standard cache location.\n\
-                For *nix systems, try setting `$XDG_CACHE_HOME` or `$HOME` environment variables.\n\
-                Alternatively, run this program with the `--cache-file <CACHE_FILE>` option."
-            );
-        })?;
+    let Some(cache_file) =
+        cache_file.or_else(|| dirs_next::cache_dir().map(|dir| dir.join(CACHE_FILE_NAME)))
+    else {
+        bail!(
+            "Failed to read standard cache location.\n\
+            For *nix systems, try setting `$XDG_CACHE_HOME` or `$HOME` environment variables.\n\
+            Alternatively, run this program with the `--cache-file <CACHE_FILE>` option."
+        );
+    };
 
     let dir_config = DirConfig {
         original_comics_dir: location.join(ORIGINAL_COMICS_NAME),
@@ -44,9 +45,12 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
     };
 
     if !location.exists() || !location.is_dir() {
-        eprintln!("Location is not a directory: `{:?}`.", location);
-        eprintln!("Please create the directory with sub-directories `comics`, `generated`, and `completed`, each of which may be symlinks.");
-        return Err(());
+        bail!(
+            "Location is not a directory: `{:?}`.\n\
+            Please create the directory with sub-directories `comics`, `generated`, and `completed`, \
+            each of which may be symlinks.",
+            location
+        );
     }
 
     for (path, name) in [
@@ -55,34 +59,31 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         (&dir_config.completed_posts_dir, COMPLETED_POSTS_NAME),
     ] {
         if !path.exists() || !path.is_dir() {
-            eprintln!("Location is missing sub-directory: `{}`", name);
-            eprintln!(
-                "Please create the directory with sub-directories `{}` which may be symlink.",
+            bail!(
+                "Location is missing sub-directory: `{0}`\n\
+                Please create the directory with sub-directories `{0}` which may be symlink.",
                 name,
             );
-            return Err(());
         }
     }
 
     Ok(dir_config)
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = args::Args::parse();
 
-    let Ok(dir_config) = get_dir_config(args.location, args.cache_file) else {
-        std::process::exit(1);
-    };
+    let dir_config = get_dir_config(args.location, args.cache_file)?;
 
     match args.command {
         args::Command::Show { date } => {
-            show_comic(&dir_config, date);
+            show_comic(&dir_config, date)?;
         }
 
         args::Command::Make { date, recent, name } => {
-            let date = get_date(&dir_config, date, recent);
+            let date = get_date(&dir_config, date, recent)?;
             let name = name.unwrap_or_else(|| get_unique_name(date));
-            make_post(&dir_config, date, &name);
+            make_post(&dir_config, date, &name)?;
             println!("Created {}", name);
         }
 
@@ -90,13 +91,15 @@ fn main() {
 
         args::Command::Transcribe { .. } => todo!(),
     }
+
+    Ok(())
 }
 
 fn get_unique_name(date: NaiveDate) -> String {
     use std::fmt::Write;
 
     const CODE_LENGTH: usize = 4;
-    const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-mm-dd".len();
+    const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-MM-DD".len();
 
     // TODO(refactor): Share rng
     let mut rng = rand::thread_rng();
@@ -120,7 +123,7 @@ fn get_unique_name(date: NaiveDate) -> String {
     name
 }
 
-fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) {
+fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) -> Result<()> {
     let original_comic_path = dir_config
         .original_comics_dir
         .join(date.to_string() + ".png");
@@ -136,45 +139,41 @@ fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) {
     let watermark = get_random_watermark();
 
     if !original_comic_path.exists() {
-        // TODO(feat/error): Handle better
-        panic!("not the date of a real comic");
+        bail!("Not the date of a real comic");
     }
 
     if !dir_config.generated_posts_dir.exists() {
-        // TODO(feat/error): Handle better
-        fs::create_dir_all(&dir_config.generated_posts_dir).expect("failed to create directory");
+        fs::create_dir_all(&dir_config.generated_posts_dir)
+            .with_context(|| "Failed to create generated posts directory")?;
     }
 
-    if exists_post_with_date(&dir_config.generated_posts_dir, date) {
-        panic!("already exists incomplete post with that date");
+    if exists_post_with_date(&dir_config.generated_posts_dir, date)? {
+        bail!("There already exists an incomplete post with that date");
     }
-    if exists_post_with_date(&dir_config.completed_posts_dir, date) {
-        panic!("already exists completed post with that date");
+    if exists_post_with_date(&dir_config.completed_posts_dir, date)? {
+        bail!("There already exists a completed post with that date");
     }
 
-    // TODO(feat/error): Handle better
     // Parent should already be created
-    fs::create_dir(&generated_dir).expect("failed to create directory");
+    fs::create_dir(&generated_dir).with_context(|| "Failed to create generated post directory")?;
 
-    // TODO(feat/error): Handle better
-    fs::write(date_file_path, date.to_string()).expect("failed to write date file");
+    fs::write(date_file_path, date.to_string()).with_context(|| "Failed to write date file")?;
 
-    // TODO(feat/error): Handle better
-    fs::File::create(title_file_path).expect("failed to create title file");
+    fs::File::create(title_file_path).with_context(|| "Failed to create title file")?;
 
-    // TODO(feat/error): Handle better
-    let icon = image::open(icon_path).expect("failed to open icon image");
-    // TODO(feat/error): Handle better
-    let original_comic = image::open(original_comic_path).expect("failed to open comic");
+    let icon = image::open(icon_path).with_context(|| "Failed to open icon image")?;
+    let original_comic =
+        image::open(original_comic_path).with_context(|| "Failed to open comic")?;
     let generated_comic = comic_format::convert_image(original_comic, &icon, watermark, 0.0);
 
-    // TODO(feat/error): Handle better
     generated_comic
         .save(&generated_comic_path)
-        .expect("failed to save comic");
+        .with_context(|| "Failed to save generated image")?;
 
-    // TODO(feat/error): Handle better
-    fs::copy(&generated_comic_path, &duplicate_comic_path).expect("failed to copy comic");
+    fs::copy(&generated_comic_path, &duplicate_comic_path)
+        .with_context(|| "Failed to copy generated image")?;
+
+    Ok(())
 }
 
 fn get_random_watermark() -> &'static str {
@@ -198,47 +197,41 @@ fn get_random_watermark() -> &'static str {
 }
 
 /// Skips entries with missing or malformed date file
-fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> bool {
-    // TODO(feat/error): Handle better
-    let entries = fs::read_dir(dir).expect("failed to read directory");
+fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool> {
+    let entries = fs::read_dir(dir).with_context(|| "Failed to read directory")?;
 
     for entry in entries {
-        // TODO(feat/error): Handle better
-        let entry = entry.expect("failed to read entry");
+        let entry = entry.with_context(|| "Failed to read directory entry")?;
 
         let date_file_path = entry.path().join("date");
         if !date_file_path.exists() {
             continue;
         }
 
-        // TODO(feat/error): Handle better
-        let date_file = fs::read_to_string(date_file_path).expect("failed to read date file");
+        let date_file =
+            fs::read_to_string(date_file_path).with_context(|| "Failed to read date file")?;
         let Ok(existing_date) = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d") else {
             continue;
         };
         if existing_date == date {
-            return true;
+            return Ok(true);
         }
     }
 
-    return false;
+    return Ok(false);
 }
 
-fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> NaiveDate {
+fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
     if !recent {
-        return date.expect("date should be `Some` without `--recent` (cli parsing is broken)");
+        return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
     }
 
     assert!(
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-    // TODO(feat/error): Handle better
-    let Some(date) = get_recent_date(&dir_config).unwrap() else {
-        // TODO(feat/error): Handle better
-        panic!("no recent comic.");
-    };
-    return date;
+
+    get_recent_date(&dir_config).with_context(|| "Failed to get recent date")
 }
 
 struct DirConfig {
@@ -257,9 +250,9 @@ macro_rules! command {
     }};
 }
 
-fn get_recent_date(dir_config: &DirConfig) -> io::Result<Option<NaiveDate>> {
+fn get_recent_date(dir_config: &DirConfig) -> Result<NaiveDate> {
     if !dir_config.recently_shown_file.exists() {
-        return Ok(None);
+        bail!("Cache file does not yet exist");
     }
     let file = fs::OpenOptions::new()
         .read(true)
@@ -268,7 +261,7 @@ fn get_recent_date(dir_config: &DirConfig) -> io::Result<Option<NaiveDate>> {
     read_last_line_date(&mut reader)
 }
 
-fn read_last_line_date<R>(reader: &mut BufReader<R>) -> io::Result<Option<NaiveDate>>
+fn read_last_line_date<R>(reader: &mut BufReader<R>) -> Result<NaiveDate>
 where
     R: io::Read,
 {
@@ -277,15 +270,21 @@ where
         let mut new_line = String::new();
         let bytes_read = reader.read_line(&mut new_line)?;
         if bytes_read == 0 {
-            return Ok(date);
+            match date {
+                Some(date) => return Ok(date),
+                None => bail!("Cache file is empty"),
+            }
         }
         if !new_line.trim().is_empty() {
-            date = NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d").ok();
+            match NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d") {
+                Ok(new_date) => date = Some(new_date),
+                Err(error) => bail!("Cache file contains invalid date: `{:?}`", error),
+            }
         }
     }
 }
 
-fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) {
+fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
     // TODO(refactor): Share rng
     let mut rng = rand::thread_rng();
 
@@ -297,20 +296,19 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) {
                 .join(date.to_string() + ".png"),
         ),
         None => {
-            // TODO(feat/error): Handle better
             let path = get_random_directory_entry(&mut rng, &dir_config.original_comics_dir)
-                .expect("failed to read comics directory")
+                .with_context(|| "Failed to read comics directory")?
                 .path();
-            // TODO(feat/error): Handle better
-            let date = get_date_from_path(&path).expect("invalid path");
+            let date = get_date_from_path(&path).with_context(|| {
+                "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
+            })?;
             (date, path)
         }
     };
 
     println!("{:?}", path);
 
-    // TODO(feat/error): Handle better
-    append_recent_date(dir_config, date).expect("failed to append to file");
+    append_recent_date(dir_config, date).with_context(|| "Failed to append to cache file")?;
 
     command!(
         "nsxiv",
@@ -322,7 +320,9 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) {
         path,
     )
     .spawn()
-    .unwrap(); // TODO(feat/error): Handle better
+    .with_context(|| "Failed to open image viewer")?;
+
+    Ok(())
 }
 
 fn get_date_from_path(path: impl AsRef<Path>) -> Option<NaiveDate> {

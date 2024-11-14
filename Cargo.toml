@@ -11,3 +11,4 @@ image = "0.24.7"
 dirs-next = "2.0.0"
 
 comic-format = { path = "../comic-format" }
+anyhow = "1.0.93"
