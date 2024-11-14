@@ -26,15 +26,10 @@ fn main() {
             show_comic(&dir_config, date);
         }
 
-        args::Command::Make {
-            date,
-            recent,
-            name,
-            skip_check,
-        } => {
+        args::Command::Make { date, recent, name } => {
             let date = get_date(&dir_config, date, recent);
             let name = name.unwrap_or_else(|| get_unique_name(date));
-            make_post(&dir_config, date, &name, skip_check);
+            make_post(&dir_config, date, &name);
             println!("Created {}", name);
         }
 
@@ -72,7 +67,7 @@ fn get_unique_name(date: NaiveDate) -> String {
     name
 }
 
-fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str, skip_check: bool) {
+fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) {
     let original_comic_path = dir_config
         .original_comics_dir
         .join(date.to_string() + ".png");
@@ -97,13 +92,11 @@ fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str, skip_check: bo
         fs::create_dir_all(&dir_config.generated_posts_dir).expect("failed to create directory");
     }
 
-    if !skip_check {
-        if exists_post_with_date(&dir_config.generated_posts_dir, date) {
-            panic!("already exists incomplete post with that date");
-        }
-        if exists_post_with_date(&dir_config.completed_posts_dir, date) {
-            panic!("already exists completed post with that date");
-        }
+    if exists_post_with_date(&dir_config.generated_posts_dir, date) {
+        panic!("already exists incomplete post with that date");
+    }
+    if exists_post_with_date(&dir_config.completed_posts_dir, date) {
+        panic!("already exists completed post with that date");
     }
 
     // TODO(feat/error): Handle better

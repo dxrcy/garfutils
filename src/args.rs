@@ -33,9 +33,6 @@ pub enum Command {
         /// Name of directory (defaults to a unique string)
         #[arg(short, long)]
         name: Option<String>,
-        /// Skip check that post does not already exist with specified date
-        #[arg(short, long)]
-        skip_check: bool,
     },
 
     /// Recreate an existing post, given an id
