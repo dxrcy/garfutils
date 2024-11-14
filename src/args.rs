@@ -53,7 +53,7 @@ pub enum Command {
     #[clap(alias = "r")]
     Revise {
         /// Id of the post to recreate
-        id: String,
+        id: Option<String>,
     },
 
     /// Transcribe an existing post, given an id

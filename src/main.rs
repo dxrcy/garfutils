@@ -1,7 +1,7 @@
 mod args;
 mod random;
 
-use std::fs::{self, DirEntry};
+use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -84,18 +84,97 @@ fn main() -> Result<()> {
         }
 
         args::Command::Make { date, recent, name } => {
-            let date = get_date(&dir_config, date, recent)?;
+            let date = get_date(&dir_config, date, recent).with_context(|| "Failed to get date")?;
             let name = name.unwrap_or_else(|| get_unique_name(date));
-            make_post(&dir_config, date, &name)?;
+            make_post(&dir_config, date, &name).with_context(|| "Failed to make post")?;
             println!("Created {}", name);
         }
 
-        args::Command::Revise { .. } => {}
+        args::Command::Revise { id } => {
+            let id = match id {
+                Some(id) => id,
+                None => match find_unrevised_post(&dir_config)
+                    .with_context(|| "Trying to find post to revise")?
+                {
+                    Some(id) => id,
+                    None => {
+                        bail!("No posts to revise");
+                    }
+                },
+            };
+            println!("{}", id);
+        }
 
         args::Command::Transcribe { .. } => todo!(),
     }
 
     Ok(())
+}
+
+fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
+    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+        let svg_file_path = path.join("esperanto.svg");
+        if svg_file_path.exists() {
+            return Ok(false);
+        }
+        let props_file_path = path.join("props");
+        if !props_file_path.exists() {
+            return Ok(false);
+        }
+        let props_file = fs::OpenOptions::new()
+            .read(true)
+            .open(&props_file_path)
+            .with_context(|| "Failed to read props file")?;
+        file_contains_line(props_file, "good")
+    })? {
+        return Ok(Some(id));
+    }
+
+    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+        let svg_file_path = path.join("esperanto.svg");
+        Ok(!svg_file_path.exists())
+    })? {
+        return Ok(Some(id));
+    }
+
+    Ok(None)
+}
+
+fn find_post<F>(directory: impl AsRef<Path>, predicate: F) -> Result<Option<String>>
+where
+    F: Fn(&Path) -> Result<bool>,
+{
+    let entries =
+        fs::read_dir(directory).with_context(|| "Failed to read completed posts directory")?;
+
+    for entry in entries {
+        let entry = entry.with_context(|| "Failed to read entry")?;
+        let path = entry.path();
+
+        if !predicate(&path)? {
+            continue;
+        }
+
+        let file_name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string());
+        let Some(file_name) = file_name.filter(|name| name.len() == 4) else {
+            bail!("Post directory has invalid name");
+        };
+
+        return Ok(Some(file_name));
+    }
+    return Ok(None);
+}
+
+fn file_contains_line(file: File, needle: &str) -> Result<bool> {
+    let reader = io::BufReader::new(file);
+    for line in reader.lines() {
+        if line?.trim() == needle {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn get_unique_name(date: NaiveDate) -> String {
