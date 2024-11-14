@@ -1,4 +1,5 @@
 mod args;
+mod random;
 
 use std::fs::{self, DirEntry};
 use std::io::{self, BufRead, BufReader, Write};
@@ -71,6 +72,8 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
 }
 
 fn main() -> Result<()> {
+    random::init_rng();
+
     let args = args::Args::parse();
 
     let dir_config = get_dir_config(args.location, args.cache_file)?;
@@ -101,9 +104,6 @@ fn get_unique_name(date: NaiveDate) -> String {
     const CODE_LENGTH: usize = 4;
     const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-MM-DD".len();
 
-    // TODO(refactor): Share rng
-    let mut rng = rand::thread_rng();
-
     let mut name = String::with_capacity(STRING_LENGTH);
 
     let char_set = if date.weekday() == chrono::Weekday::Sun {
@@ -113,7 +113,7 @@ fn get_unique_name(date: NaiveDate) -> String {
     };
 
     for _ in 0..CODE_LENGTH {
-        let letter: char = rng.gen_range(char_set.clone());
+        let letter: char = random::with_rng(|rng| rng.gen_range(char_set.clone()));
         name.push(letter);
     }
 
@@ -177,9 +177,6 @@ fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) -> Result<()> 
 }
 
 fn get_random_watermark() -> &'static str {
-    // TODO(refactor): Share rng
-    let mut rng = rand::thread_rng();
-
     const WATERMARKS: &[&str] = &[
         "GarfEO",
         "@garfield.eo.v2",
@@ -193,7 +190,8 @@ fn get_random_watermark() -> &'static str {
         "garf-eo",
     ];
 
-    return WATERMARKS[rng.gen_range(0..WATERMARKS.len())];
+    let index = random::with_rng(|rng| rng.gen_range(0..WATERMARKS.len()));
+    return WATERMARKS[index];
 }
 
 /// Skips entries with missing or malformed date file
@@ -285,9 +283,6 @@ where
 }
 
 fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
-    // TODO(refactor): Share rng
-    let mut rng = rand::thread_rng();
-
     let (date, path) = match date {
         Some(date) => (
             date,
@@ -296,7 +291,8 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
                 .join(date.to_string() + ".png"),
         ),
         None => {
-            let path = get_random_directory_entry(&mut rng, &dir_config.original_comics_dir)
+            // TODO(fix): check if length == 0
+            let path = get_random_directory_entry(&dir_config.original_comics_dir)
                 .with_context(|| "Failed to read comics directory")?
                 .path();
             let date = get_date_from_path(&path).with_context(|| {
@@ -345,12 +341,9 @@ fn append_recent_date(dir_config: &DirConfig, date: NaiveDate) -> io::Result<()>
     Ok(())
 }
 
-fn get_random_directory_entry(
-    rng: &mut impl Rng,
-    directory: impl AsRef<Path>,
-) -> io::Result<DirEntry> {
+fn get_random_directory_entry(directory: impl AsRef<Path>) -> io::Result<DirEntry> {
     let count = count_directory_entries(&directory)?;
-    let index = rng.gen_range(0..count);
+    let index = random::with_rng(|rng| rng.gen_range(0..count));
     let entry = get_nth_directory_entry(&directory, index)?
         .expect("generated index should be in range of directory entry count");
     Ok(entry)
