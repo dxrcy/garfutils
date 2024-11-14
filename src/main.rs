@@ -2,7 +2,7 @@ mod args;
 mod random;
 
 use std::fs::{self, DirEntry, File};
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -15,6 +15,7 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
     const ORIGINAL_COMICS_NAME: &str = "comics";
     const GENERATED_POSTS_NAME: &str = "generated";
     const COMPLETED_POSTS_NAME: &str = "completed";
+    const OLD_POSTS_NAME: &str = "old";
     const LOCATION_NAME: &str = "garfutils";
     const CACHE_FILE_NAME: &str = "garfutils.recent";
 
@@ -42,12 +43,13 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         original_comics_dir: location.join(ORIGINAL_COMICS_NAME),
         generated_posts_dir: location.join(GENERATED_POSTS_NAME),
         completed_posts_dir: location.join(COMPLETED_POSTS_NAME),
+        old_posts_dir: location.join(OLD_POSTS_NAME),
         recently_shown_file: cache_file,
     };
 
     if !location.exists() || !location.is_dir() {
         bail!(
-            "Location is not a directory: `{:?}`.\n\
+            "Location is not a directory: {:?}.\n\
             Please create the directory with sub-directories `comics`, `generated`, and `completed`, \
             each of which may be symlinks.",
             location
@@ -58,12 +60,15 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         (&dir_config.original_comics_dir, ORIGINAL_COMICS_NAME),
         (&dir_config.generated_posts_dir, GENERATED_POSTS_NAME),
         (&dir_config.completed_posts_dir, COMPLETED_POSTS_NAME),
+        (&dir_config.old_posts_dir, OLD_POSTS_NAME),
     ] {
         if !path.exists() || !path.is_dir() {
             bail!(
                 "Location is missing sub-directory: `{0}`\n\
+                in {1:?}\n\
                 Please create the directory with sub-directories `{0}` which may be symlink.",
                 name,
+                location,
             );
         }
     }
@@ -85,30 +90,122 @@ fn main() -> Result<()> {
 
         args::Command::Make { date, recent, name } => {
             let date = get_date(&dir_config, date, recent).with_context(|| "Failed to get date")?;
+            // TODO(feat): Remove `--name` (unused)
             let name = name.unwrap_or_else(|| get_unique_name(date));
-            make_post(&dir_config, date, &name).with_context(|| "Failed to make post")?;
+            make_post(&dir_config, date, &name, false).with_context(|| "Failed to make post")?;
             println!("Created {}", name);
         }
 
         args::Command::Revise { id } => {
-            let id = match id {
-                Some(id) => id,
-                None => match find_unrevised_post(&dir_config)
-                    .with_context(|| "Trying to find post to revise")?
-                {
-                    Some(id) => id,
-                    None => {
-                        bail!("No posts to revise");
-                    }
-                },
-            };
+            let id = get_id(&dir_config, id)?;
+
+            let date_file_path = dir_config.completed_posts_dir.join(&id).join("date");
+            let date_file = fs::read_to_string(date_file_path)?;
+            let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
+                .with_context(|| "Invalid date file for post")?;
+
             println!("{}", id);
+            println!("{}", date);
+
+            let name = get_unique_name(date);
+            make_post(&dir_config, date, &name, true).with_context(|| "Failed to make post")?;
+            println!("Created {}", name);
+
+            let post_path = dir_config.completed_posts_dir.join(&id);
+            let generated_path = dir_config.generated_posts_dir.join(&name);
+
+            let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
+                let old_path = post_path.join(file_name);
+                let new_path = generated_path.join(file_name);
+                if !old_path.exists() {
+                    if !required {
+                        return Ok(());
+                    }
+                    bail!("Post is missing `{}` file", file_name);
+                }
+                fs::copy(old_path, new_path)
+                    .with_context(|| format!("Failed to copy `{}` file", file_name))?;
+                Ok(())
+            };
+
+            copy_post_file("title", true)?;
+            for file_name in ["transcript", "props", "special"] {
+                copy_post_file(file_name, false)?;
+            }
+
+            print_confirmation("Move old post to old directory? ");
+
+            let old_post_path = dir_config.old_posts_dir.join(&id);
+            if old_post_path.exists() {
+                bail!("TODO: post already revised");
+            }
+            fs::rename(&post_path, &old_post_path)
+                .with_context(|| "Failed to move post to `old` directory")?;
+            println!("Moved {} to old directory", id);
+
+            println!("(waiting until done...)");
+            wait_for_file(&post_path)?;
+
+            print_confirmation("Transcribe now? ");
+
+            println!("TODO: transcribe");
         }
 
         args::Command::Transcribe { .. } => todo!(),
     }
 
     Ok(())
+}
+
+fn print_confirmation(prompt: &str) {
+    print!("{}", prompt);
+    io::stdout().flush().expect("failed to flush stdout");
+    stdin_read_and_discard();
+    println!();
+}
+
+fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
+    use std::thread;
+    use std::time::Duration;
+
+    const WAIT_DELAY: Duration = Duration::from_millis(500);
+
+    while !path.as_ref().exists() {
+        thread::sleep(WAIT_DELAY);
+    }
+    Ok(())
+}
+
+fn stdin_read_and_discard() {
+    let mut reader = BufReader::new(io::stdin());
+    loop {
+        let mut buf = [0];
+        reader.read_exact(&mut buf).expect("failed to read stdin");
+        if buf[0] == b'\n' {
+            return;
+        }
+    }
+}
+
+fn get_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
+    if let Some(id) = id {
+        if !post_exists(&dir_config, &id) {
+            bail!("No post exists with that id");
+        }
+        return Ok(id);
+    }
+
+    if let Some(id) =
+        find_unrevised_post(&dir_config).with_context(|| "Trying to find post to revise")?
+    {
+        return Ok(id);
+    }
+
+    bail!("No posts to revise");
+}
+
+fn post_exists(dir_config: &DirConfig, id: &str) -> bool {
+    dir_config.completed_posts_dir.join(id).is_dir()
 }
 
 fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
@@ -202,7 +299,12 @@ fn get_unique_name(date: NaiveDate) -> String {
     name
 }
 
-fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) -> Result<()> {
+fn make_post(
+    dir_config: &DirConfig,
+    date: NaiveDate,
+    name: &str,
+    skip_post_check: bool,
+) -> Result<()> {
     let original_comic_path = dir_config
         .original_comics_dir
         .join(date.to_string() + ".png");
@@ -229,8 +331,10 @@ fn make_post(dir_config: &DirConfig, date: NaiveDate, name: &str) -> Result<()> 
     if exists_post_with_date(&dir_config.generated_posts_dir, date)? {
         bail!("There already exists an incomplete post with that date");
     }
-    if exists_post_with_date(&dir_config.completed_posts_dir, date)? {
-        bail!("There already exists a completed post with that date");
+    if !skip_post_check {
+        if exists_post_with_date(&dir_config.completed_posts_dir, date)? {
+            bail!("There already exists a completed post with that date");
+        }
     }
 
     // Parent should already be created
@@ -316,6 +420,7 @@ struct DirConfig {
     pub recently_shown_file: PathBuf,
     pub generated_posts_dir: PathBuf,
     pub completed_posts_dir: PathBuf,
+    pub old_posts_dir: PathBuf,
 }
 
 macro_rules! command {
@@ -355,7 +460,7 @@ where
         if !new_line.trim().is_empty() {
             match NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d") {
                 Ok(new_date) => date = Some(new_date),
-                Err(error) => bail!("Cache file contains invalid date: `{:?}`", error),
+                Err(error) => bail!("Cache file contains invalid date: {:?}", error),
             }
         }
     }
