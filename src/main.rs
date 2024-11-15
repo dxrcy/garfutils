@@ -15,15 +15,6 @@ use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
 
-const ORIGINAL_COMICS_NAME: &str = "comics";
-const GENERATED_POSTS_NAME: &str = "generated";
-const COMPLETED_POSTS_NAME: &str = "completed";
-const OLD_POSTS_NAME: &str = "old";
-const LOCATION_NAME: &str = "garfutils";
-// Not using `/tmp` to ensure same mount point as destination
-const TEMP_NAME: &str = "tmp";
-const CACHE_FILE_NAME: &str = "recent";
-
 const IMAGE_ESPERANTO_NAME: &str = "esperanto.png";
 const IMAGE_ENGLISH_NAME: &str = "english.png";
 const IMAGE_SVG_NAME: &str = "esperanto.svg";
@@ -55,83 +46,123 @@ const WATERMARKS: &[&str] = &[
 // TODO(feat): Read icon from file
 const ICON_DATA: &[u8] = include_bytes!("../icon.png");
 
-fn get_dir_config(location: Option<PathBuf>) -> Result<DirConfig> {
-    let Some(location) =
-        location.or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
-    else {
+struct Location {
+    base_dir: PathBuf,
+}
+
+impl Location {
+    // TODO(refactor): Rename these constants
+    const LOCATION_NAME: &str = "garfutils";
+
+    // TODO(feat): Possibly rename these directories
+    const ORIGINAL_COMICS_NAME: &str = "comics";
+    const GENERATED_POSTS_NAME: &str = "generated";
+    const COMPLETED_POSTS_NAME: &str = "completed";
+    const OLD_POSTS_NAME: &str = "old";
+    // Not using `/tmp` to ensure same mount point as destination
+    const TEMP_NAME: &str = "tmp";
+    const CACHE_FILE_NAME: &str = "recent";
+
+    pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
+        let base_dir = Self::get_base_dir(base_dir)?;
+        let location = Self { base_dir };
+        location.check_dirs_exist()?;
+        Ok(location)
+    }
+
+    pub fn source_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::ORIGINAL_COMICS_NAME)
+    }
+    pub fn generated_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::GENERATED_POSTS_NAME)
+    }
+    pub fn completed_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::COMPLETED_POSTS_NAME)
+    }
+    pub fn old_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::OLD_POSTS_NAME)
+    }
+    pub fn temp_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::TEMP_NAME)
+    }
+    pub fn recent_file(&self) -> PathBuf {
+        self.base_dir.join(Self::CACHE_FILE_NAME)
+    }
+
+    fn get_base_dir(base_dir: Option<PathBuf>) -> Result<PathBuf> {
+        if let Some(path) = base_dir {
+            return Ok(path);
+        }
+        if let Some(path) = dirs_next::data_dir() {
+            return Ok(path.join(Self::LOCATION_NAME));
+        }
         bail!(
             "Failed to read standard data location.\n\
             For *nix systems, try setting `$XDG_DATA_HOME` or `$HOME` environment variables.\n\
             Alternatively, run this program with the `--location <LOCATION>` option."
         );
-    };
-
-    let dir_config = DirConfig {
-        original_comics_dir: location.join(ORIGINAL_COMICS_NAME),
-        generated_posts_dir: location.join(GENERATED_POSTS_NAME),
-        completed_posts_dir: location.join(COMPLETED_POSTS_NAME),
-        old_posts_dir: location.join(OLD_POSTS_NAME),
-        temp_dir: location.join(TEMP_NAME),
-        recently_shown_file: location.join(CACHE_FILE_NAME),
-    };
-
-    if !location.exists() || !location.is_dir() {
-        bail!(
-            "Location is not a directory: {:?}.\n\
-            Please create the directory with sub-directories `comics`, `generated`, and `completed`, \
-            each of which may be symlinks.",
-            location
-        );
     }
 
-    for (path, name) in [
-        (&dir_config.original_comics_dir, ORIGINAL_COMICS_NAME),
-        (&dir_config.generated_posts_dir, GENERATED_POSTS_NAME),
-        (&dir_config.completed_posts_dir, COMPLETED_POSTS_NAME),
-        (&dir_config.old_posts_dir, OLD_POSTS_NAME),
-        // Don't check temp directory
-    ] {
-        if !path.exists() || !path.is_dir() {
+    fn check_dirs_exist(&self) -> Result<()> {
+        if !self.base_dir.exists() || !self.base_dir.is_dir() {
             bail!(
-                "Location is missing sub-directory: `{0}`\n\
-                in {1:?}\n\
-                Please create the directory with sub-directories `{0}` which may be symlink.",
-                name,
-                location,
+                "Location is not a directory: {:?}.\n\
+                Please create the directory with sub-directories `comics`, `generated`, and `completed`, \
+                each of which may be symlinks.",
+                self.base_dir,
             );
         }
-    }
 
-    Ok(dir_config)
+        let expected_sub_dirs = [
+            (self.source_dir(), Self::ORIGINAL_COMICS_NAME),
+            (self.generated_dir(), Self::GENERATED_POSTS_NAME),
+            (self.completed_dir(), Self::COMPLETED_POSTS_NAME),
+            (self.old_dir(), Self::OLD_POSTS_NAME),
+        ];
+        for (path, name) in expected_sub_dirs {
+            if !path.exists() || !path.is_dir() {
+                bail!(
+                    "Location is missing sub-directory: `{0}`\n\
+                    in {1:?}\n\
+                    Please create the directory with sub-directories `{0}` which may be symlink.",
+                    name,
+                    self.base_dir,
+                );
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
     random::init_rng();
 
     let args = args::Args::parse();
-    let dir_config = get_dir_config(args.location)?;
+
+    let location = Location::from(args.location).with_context(|| "Failed to verify location")?;
 
     match args.command {
         args::Command::Show { date } => {
-            show_comic(&dir_config, date)?;
+            show_comic(&location, date)?;
         }
 
         args::Command::Make { date, recent } => {
-            let date = get_date(&dir_config, date, recent).with_context(|| "Failed to get date")?;
+            let date = get_date(&location, date, recent).with_context(|| "Failed to get date")?;
             let name = get_unique_name(date);
-            make_post(&dir_config, date, &name, false).with_context(|| "Failed to make post")?;
+            make_post(&location, date, &name, false).with_context(|| "Failed to make post")?;
         }
 
         args::Command::Revise { id } => {
-            let id = get_revise_id(&dir_config, id)?;
-            revise_post(&dir_config, &id).with_context(|| "Failed to revise post")?;
+            let id = get_revise_id(&location, id)?;
+            revise_post(&location, &id).with_context(|| "Failed to revise post")?;
             print_confirmation("Transcribe now?");
-            transcribe_post(&dir_config, &id).with_context(|| "Failed to transcribe post")?;
+            transcribe_post(&location, &id).with_context(|| "Failed to transcribe post")?;
         }
 
         args::Command::Transcribe { id } => {
-            let id = get_transcribe_id(&dir_config, id)?;
-            transcribe_post(&dir_config, &id).with_context(|| "Failed to transcribe post")?;
+            let id = get_transcribe_id(&location, id)?;
+            transcribe_post(&location, &id).with_context(|| "Failed to transcribe post")?;
         }
     }
 
@@ -209,17 +240,18 @@ fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>]) -> Result<()> {
     Ok(())
 }
 
-fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
-    if !dir_config.temp_dir.exists() {
-        fs::create_dir_all(&dir_config.temp_dir)
+fn transcribe_post(location: &Location, id: &str) -> Result<()> {
+    let temp_dir = location.temp_dir();
+    if !temp_dir.exists() {
+        fs::create_dir_all(&temp_dir)
             .with_context(|| "Failed to create temp directory for transcript file")?;
     }
 
     // "{temp_dir}/transcript.{id}"
-    let mut temp_file_path = dir_config.temp_dir.join("transcript");
+    let mut temp_file_path = temp_dir.join("transcript");
     temp_file_path.set_extension(id);
 
-    let completed_dir = dir_config.completed_posts_dir.join(id);
+    let completed_dir = location.completed_dir().join(id);
 
     let transcript_file_path = completed_dir.join(TRANSCRIPT_NAME);
     let esperanto_file_path = completed_dir.join(IMAGE_ESPERANTO_NAME);
@@ -280,16 +312,18 @@ fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<
     Ok(file_contents == target)
 }
 
-fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
-    let date_file_path = dir_config.completed_posts_dir.join(id).join("date");
+fn revise_post(location: &Location, id: &str) -> Result<()> {
+    let completed_dir = location.completed_dir();
+
+    let date_file_path = completed_dir.join(id).join("date");
     let date_file = fs::read_to_string(date_file_path)?;
     let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
         .with_context(|| "Invalid date file for post")?;
 
-    make_post(dir_config, date, id, true).with_context(|| "Failed to make post")?;
+    make_post(location, date, id, true).with_context(|| "Failed to make post")?;
 
-    let post_path = dir_config.completed_posts_dir.join(id);
-    let generated_path = dir_config.generated_posts_dir.join(id);
+    let post_path = completed_dir.join(id);
+    let generated_path = location.generated_dir().join(id);
 
     // TODO(refactor): Inline closure manually
     let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
@@ -313,7 +347,7 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     print_confirmation("Move old post to old directory?");
 
-    let old_post_path = dir_config.old_posts_dir.join(id);
+    let old_post_path = location.old_dir().join(id);
     if old_post_path.exists() {
         // TODO(feat): Handle post already revised
         bail!("unimplemented: post already revised");
@@ -353,15 +387,15 @@ fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
+fn get_revise_id(location: &Location, id: Option<String>) -> Result<String> {
     if let Some(id) = id {
-        if !post_exists(dir_config, &id) {
+        if !post_exists(location, &id) {
             bail!("No post exists with that id");
         }
         return Ok(id);
     }
     if let Some(id) =
-        find_unrevised_post(dir_config).with_context(|| "Trying to find post to revise")?
+        find_unrevised_post(location).with_context(|| "Trying to find post to revise")?
     {
         println!("Post id: {}", id);
         return Ok(id);
@@ -369,15 +403,15 @@ fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
     bail!("No posts to revise");
 }
 
-fn get_transcribe_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
+fn get_transcribe_id(location: &Location, id: Option<String>) -> Result<String> {
     if let Some(id) = id {
-        if !post_exists(dir_config, &id) {
+        if !post_exists(location, &id) {
             bail!("No post exists with that id");
         }
         return Ok(id);
     }
     if let Some(id) =
-        find_untranscribed_post(dir_config).with_context(|| "Trying to find post to transcribe")?
+        find_untranscribed_post(location).with_context(|| "Trying to find post to transcribe")?
     {
         println!("Post id: {}", id);
         return Ok(id);
@@ -385,12 +419,14 @@ fn get_transcribe_id(dir_config: &DirConfig, id: Option<String>) -> Result<Strin
     bail!("No posts to transcribe");
 }
 
-fn post_exists(dir_config: &DirConfig, id: &str) -> bool {
-    dir_config.completed_posts_dir.join(id).is_dir()
+fn post_exists(location: &Location, id: &str) -> bool {
+    location.completed_dir().join(id).is_dir()
 }
 
-fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
-    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
+    let completed_dir = location.completed_dir();
+
+    if let Some(id) = find_post(&completed_dir, |path| {
         let svg_file_path = path.join(IMAGE_SVG_NAME);
         if svg_file_path.exists() {
             return Ok(false);
@@ -408,7 +444,7 @@ fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
         return Ok(Some(id));
     }
 
-    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+    if let Some(id) = find_post(&completed_dir, |path| {
         let svg_file_path = path.join(IMAGE_SVG_NAME);
         Ok(!svg_file_path.exists())
     })? {
@@ -418,8 +454,10 @@ fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
     Ok(None)
 }
 
-fn find_untranscribed_post(dir_config: &DirConfig) -> Result<Option<String>> {
-    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
+    let completed_dir = location.completed_dir();
+
+    if let Some(id) = find_post(&completed_dir, |path| {
         let transcript_file_path = path.join(TRANSCRIPT_NAME);
         let svg_file_path = path.join(IMAGE_SVG_NAME);
         Ok(!transcript_file_path.exists() && svg_file_path.exists())
@@ -493,19 +531,21 @@ fn get_unique_name(date: NaiveDate) -> String {
 }
 
 fn make_post(
-    dir_config: &DirConfig,
+    location: &Location,
     date: NaiveDate,
     name: &str,
     skip_post_check: bool,
 ) -> Result<()> {
-    let mut original_comic_path = dir_config.original_comics_dir.join(date.to_string());
+    let generated_dir = location.generated_dir();
+
+    let mut original_comic_path = location.source_dir().join(date.to_string());
     original_comic_path.set_extension(ORIGINAL_COMIC_FORMAT);
-    let generated_dir = dir_config.generated_posts_dir.join(name);
+    let output_dir = generated_dir.join(name);
     // TODO(refactor): Define file names as constants
-    let title_file_path = generated_dir.join(TITLE_NAME);
-    let date_file_path = generated_dir.join(DATE_NAME);
-    let generated_comic_path = generated_dir.join(IMAGE_ENGLISH_NAME);
-    let duplicate_comic_path = generated_dir.join(IMAGE_ESPERANTO_NAME);
+    let title_file_path = output_dir.join(TITLE_NAME);
+    let date_file_path = output_dir.join(DATE_NAME);
+    let generated_comic_path = output_dir.join(IMAGE_ENGLISH_NAME);
+    let duplicate_comic_path = output_dir.join(IMAGE_ESPERANTO_NAME);
 
     let icon = image::load_from_memory(ICON_DATA).expect("load static icon as image");
 
@@ -515,20 +555,25 @@ fn make_post(
         bail!("Not the date of a real comic");
     }
 
-    if !dir_config.generated_posts_dir.exists() {
-        fs::create_dir_all(&dir_config.generated_posts_dir)
-            .with_context(|| "Failed to create generated posts directory")?;
-    }
+    // if !generated_dir.exists() {
+    //     fs::create_dir_all(&generated_dir)
+    //         .with_context(|| "Failed to create generated posts directory")?;
+    // }
 
-    if exists_post_with_date(&dir_config.generated_posts_dir, date)? {
+    if exists_post_with_date(&generated_dir, date)
+        .with_context(|| "Checking if post already generated")?
+    {
         bail!("There already exists an incomplete post with that date");
     }
-    if exists_post_with_date(&dir_config.completed_posts_dir, date)? && !skip_post_check {
+    if exists_post_with_date(&location.completed_dir(), date)
+        .with_context(|| "Checking if post already exists")?
+        && !skip_post_check
+    {
         bail!("There already exists a completed post with that date");
     }
 
     // Parent should already be created
-    fs::create_dir(&generated_dir).with_context(|| "Failed to create generated post directory")?;
+    fs::create_dir(&output_dir).with_context(|| "Failed to create generated post directory")?;
 
     fs::write(date_file_path, date.to_string()).with_context(|| "Failed to write date file")?;
 
@@ -579,7 +624,7 @@ fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool>
     Ok(false)
 }
 
-fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
+fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
     if !recent {
         return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
     }
@@ -587,27 +632,18 @@ fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Re
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-    let recent_date = get_recent_date(dir_config).with_context(|| "Failed to get recent date")?;
+    let recent_date = get_recent_date(location).with_context(|| "Failed to get recent date")?;
     println!("Date: {}", recent_date);
     Ok(recent_date)
 }
 
-struct DirConfig {
-    pub original_comics_dir: PathBuf,
-    pub generated_posts_dir: PathBuf,
-    pub completed_posts_dir: PathBuf,
-    pub old_posts_dir: PathBuf,
-    pub temp_dir: PathBuf,
-    pub recently_shown_file: PathBuf,
-}
+fn get_recent_date(location: &Location) -> Result<NaiveDate> {
+    let recent_file = location.recent_file();
 
-fn get_recent_date(dir_config: &DirConfig) -> Result<NaiveDate> {
-    if !dir_config.recently_shown_file.exists() {
+    if !recent_file.exists() {
         bail!("Cache file does not yet exist");
     }
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .open(&dir_config.recently_shown_file)?;
+    let file = fs::OpenOptions::new().read(true).open(&recent_file)?;
     let mut reader = BufReader::new(file);
     read_last_line_date(&mut reader)
 }
@@ -635,16 +671,18 @@ where
     }
 }
 
-fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
+fn show_comic(location: &Location, date: Option<NaiveDate>) -> Result<()> {
+    let source_dir = location.source_dir();
+
     let (date, path) = match date {
         Some(date) => {
-            let mut path = dir_config.original_comics_dir.join(date.to_string());
+            let mut path = source_dir.join(date.to_string());
             path.set_extension(ORIGINAL_COMIC_FORMAT);
             (date, path)
         }
         None => {
             // TODO(fix): check if length == 0
-            let path = get_random_directory_entry(&dir_config.original_comics_dir)
+            let path = get_random_directory_entry(&source_dir)
                 .with_context(|| "Failed to read comics directory")?
                 .path();
             let date = get_date_from_path(&path).with_context(|| {
@@ -656,7 +694,7 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
 
     println!("{}", date);
 
-    append_recent_date(dir_config, date).with_context(|| "Failed to append to cache file")?;
+    append_recent_date(location, date).with_context(|| "Failed to append to cache file")?;
 
     kill_process_class(IMAGE_CLASS_SHOW)?;
     spawn_image_viewer(&[path], IMAGE_CLASS_SHOW, true)?;
@@ -675,11 +713,11 @@ fn get_date_from_path(path: impl AsRef<Path>) -> Option<NaiveDate> {
     date.ok()
 }
 
-fn append_recent_date(dir_config: &DirConfig, date: NaiveDate) -> io::Result<()> {
+fn append_recent_date(location: &Location, date: NaiveDate) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&dir_config.recently_shown_file)?;
+        .open(&location.recent_file())?;
     writeln!(file, "{}", date)?;
     Ok(())
 }
