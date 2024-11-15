@@ -231,10 +231,10 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         "--class",
         IMAGE_CLASS_TRANSCRIBE,
     ]?;
-    // Unhide main window
-    command!["bspc", "node", &bspc_node, "-g", "hidden"]?;
     // Wait for image viewer to completely start
     thread::sleep(Duration::from_millis(50));
+    // Unhide main window
+    command!["bspc", "node", &bspc_node, "-g", "hidden"]?;
     // Move image viewer to left, resize slightly, re-focus main window
     command!["bspc", "node", "-s", "west"]?;
     command!["bspc", "node", "-z", "right", "-200", "0"]?;
