@@ -4,12 +4,52 @@ mod random;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
+
+macro_rules! command {
+    ( async $name:expr, $( $arg:expr ),* $(,)? ) => {{
+        let mut command = ::std::process::Command::new($name);
+        $( command.arg($arg); )*
+        command
+            .spawn() // Spawn child process
+            .with_context(|| format!(
+                "Failed to spawn `{}` command with arguments: {:#?}",
+                $name, command.get_args(),
+            ))
+    }};
+
+    ( become $name:expr, $( $arg:expr ),* $(,)? ) => {{
+        let mut command = ::std::process::Command::new($name);
+        $( command.arg($arg); )*
+        command
+            // Inherit standard io streams (makes vim work)
+            .stdin (::std::process::Stdio::inherit())
+            .stdout(::std::process::Stdio::inherit())
+            .stderr(::std::process::Stdio::inherit())
+            .output() // Block execution
+            .with_context(|| format!(
+                "Failed to run `{}` command with arguments: {:#?}",
+                $name, command.get_args(),
+            ))
+    }};
+
+    ( $name:expr, $( $arg:expr ),* $(,)? ) => {{
+        let mut command = ::std::process::Command::new($name);
+        $( command.arg($arg); )*
+        command
+            .output() // Block execution
+            .with_context(|| format!(
+                "Failed to run `{}` command with arguments: {:#?}",
+                $name, command.get_args(),
+            ))
+    }};
+}
 
 fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
     const ORIGINAL_COMICS_NAME: &str = "comics";
@@ -97,62 +137,162 @@ fn main() -> Result<()> {
         }
 
         args::Command::Revise { id } => {
-            let id = get_id(&dir_config, id)?;
-
-            let date_file_path = dir_config.completed_posts_dir.join(&id).join("date");
-            let date_file = fs::read_to_string(date_file_path)?;
-            let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
-                .with_context(|| "Invalid date file for post")?;
-
-            println!("{}", id);
-            println!("{}", date);
-
-            let name = get_unique_name(date);
-            make_post(&dir_config, date, &name, true).with_context(|| "Failed to make post")?;
-            println!("Created {}", name);
-
-            let post_path = dir_config.completed_posts_dir.join(&id);
-            let generated_path = dir_config.generated_posts_dir.join(&name);
-
-            let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
-                let old_path = post_path.join(file_name);
-                let new_path = generated_path.join(file_name);
-                if !old_path.exists() {
-                    if !required {
-                        return Ok(());
-                    }
-                    bail!("Post is missing `{}` file", file_name);
-                }
-                fs::copy(old_path, new_path)
-                    .with_context(|| format!("Failed to copy `{}` file", file_name))?;
-                Ok(())
-            };
-
-            copy_post_file("title", true)?;
-            for file_name in ["transcript", "props", "special"] {
-                copy_post_file(file_name, false)?;
-            }
-
-            print_confirmation("Move old post to old directory? ");
-
-            let old_post_path = dir_config.old_posts_dir.join(&id);
-            if old_post_path.exists() {
-                bail!("TODO: post already revised");
-            }
-            fs::rename(&post_path, &old_post_path)
-                .with_context(|| "Failed to move post to `old` directory")?;
-            println!("Moved {} to old directory", id);
-
-            println!("(waiting until done...)");
-            wait_for_file(&post_path)?;
-
-            print_confirmation("Transcribe now? ");
-
-            println!("TODO: transcribe");
+            let id = get_revise_id(&dir_config, id)?;
+            revise_post(&dir_config, &id).with_context(|| "Failed to revise post")?;
         }
 
-        args::Command::Transcribe { .. } => todo!(),
+        args::Command::Transcribe { id } => {
+            let id = get_transcribe_id(&dir_config, id)?;
+            transcribe_post(&dir_config, &id).with_context(|| "Failed to transcribe post")?;
+        }
     }
+
+    Ok(())
+}
+
+fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
+    // TODO(refactor): Move to `DirConfig`
+    // Not using `/tmp` to ensure same mount point as destination
+    let temp_directory = Path::new("/home/darcy/.local/share/garfutils/tmp/");
+    if !temp_directory.exists() {
+        fs::create_dir_all(temp_directory)
+            .with_context(|| "Failed to create temp directory for transcript file")?;
+    }
+
+    let mut temp_file_path = temp_directory.join("transcript.");
+    temp_file_path.set_extension(&id);
+
+    let esperanto_file_path = dir_config
+        .completed_posts_dir
+        .join(&id)
+        .join("esperanto.png");
+    let english_file_path = dir_config.completed_posts_dir.join(&id).join("english.png");
+    let transcript_file_path = dir_config.completed_posts_dir.join(&id).join("transcript");
+
+    let id_number = id
+        .parse::<u32>()
+        .with_context(|| "Post id is not an integer")?;
+
+    // TODO(refactor): Move to wider scope?
+    const IMAGE_VIEWER_CLASS: &str = "garfutils-transcribe";
+
+    command!["pkill", "--full", IMAGE_VIEWER_CLASS]?;
+    command![
+        async "nsxiv",
+        esperanto_file_path,
+        english_file_path,
+        "--class",
+        IMAGE_VIEWER_CLASS,
+    ]?;
+
+    // ******** !!! BSPWM-SPECIFIC FUNCTIONALITY !!! ********
+    thread::sleep(Duration::from_millis(100));
+
+    let bspc_node = command!["bspc", "query", "-N", "-n"]?.stdout;
+    let bspc_node = std::str::from_utf8(&bspc_node)
+        .expect("commmand result should be utf-8")
+        .trim();
+
+    command!["tabc", "detach", bspc_node]?;
+    thread::sleep(Duration::from_millis(100));
+
+    command!["bspc", "node", "-s", "west"]?;
+    command!["bspc", "node", "-z", "right", "-200", "0"]?;
+    command!["bspc", "node", "-f", "east"]?;
+    // ******************************************************
+
+    let transcript_template = if transcript_file_path.exists() {
+        println!("(transcript file already exists)");
+        fs::read_to_string(&transcript_file_path)
+            .with_context(|| "Failed to read existing transcript file")?
+    } else {
+        let is_sunday = (id_number + 1) % 7 == 0;
+        if is_sunday {
+            "---\n---\n---\n---\n---\n---"
+        } else {
+            "---\n---"
+        }
+        .to_string()
+    };
+
+    fs::write(&temp_file_path, &transcript_template)
+        .with_context(|| "Failed to write template transcript file")?;
+
+    command![become "nvim", &temp_file_path]?;
+
+    command!["pkill", "--full", IMAGE_VIEWER_CLASS]?;
+
+    if file_matches_string(&temp_file_path, &transcript_template)
+        .with_context(|| "Failed to compare transcript file against previous version")?
+    {
+        println!("No changes made.");
+        return Ok(());
+    }
+
+    print_confirmation("Save transcript file? ");
+
+    fs::rename(temp_file_path, &transcript_file_path)
+        .with_context(|| "Failed to move temporary file to save transcript")?;
+
+    println!("Saved transcript file.");
+
+    Ok(())
+}
+
+fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<bool> {
+    // TODO(opt): This doesn't have to alloc a new String
+    let file_contents = fs::read_to_string(file_path)?;
+    Ok(file_contents == target)
+}
+
+fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
+    let date_file_path = dir_config.completed_posts_dir.join(&id).join("date");
+    let date_file = fs::read_to_string(date_file_path)?;
+    let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
+        .with_context(|| "Invalid date file for post")?;
+
+    let name = get_unique_name(date);
+    make_post(&dir_config, date, &name, true).with_context(|| "Failed to make post")?;
+    println!("Created {}", name);
+
+    let post_path = dir_config.completed_posts_dir.join(&id);
+    let generated_path = dir_config.generated_posts_dir.join(&name);
+
+    let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
+        let old_path = post_path.join(file_name);
+        let new_path = generated_path.join(file_name);
+        if !old_path.exists() {
+            if !required {
+                return Ok(());
+            }
+            bail!("Post is missing `{}` file", file_name);
+        }
+        fs::copy(old_path, new_path)
+            .with_context(|| format!("Failed to copy `{}` file", file_name))?;
+        Ok(())
+    };
+
+    copy_post_file("title", true)?;
+    for file_name in ["transcript", "props", "special"] {
+        copy_post_file(file_name, false)?;
+    }
+
+    print_confirmation("Move old post to old directory? ");
+
+    let old_post_path = dir_config.old_posts_dir.join(&id);
+    if old_post_path.exists() {
+        bail!("TODO: post already revised");
+    }
+    fs::rename(&post_path, &old_post_path)
+        .with_context(|| "Failed to move post to `old` directory")?;
+    println!("Moved {} to old directory", id);
+
+    println!("(waiting until done...)");
+    wait_for_file(&post_path)?;
+
+    print_confirmation("Transcribe now? ");
+
+    println!("TODO: transcribe");
 
     Ok(())
 }
@@ -165,9 +305,6 @@ fn print_confirmation(prompt: &str) {
 }
 
 fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
-    use std::thread;
-    use std::time::Duration;
-
     const WAIT_DELAY: Duration = Duration::from_millis(500);
 
     while !path.as_ref().exists() {
@@ -187,21 +324,34 @@ fn stdin_read_and_discard() {
     }
 }
 
-fn get_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
+fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
     if let Some(id) = id {
         if !post_exists(&dir_config, &id) {
             bail!("No post exists with that id");
         }
         return Ok(id);
     }
-
     if let Some(id) =
         find_unrevised_post(&dir_config).with_context(|| "Trying to find post to revise")?
     {
         return Ok(id);
     }
-
     bail!("No posts to revise");
+}
+
+fn get_transcribe_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
+    if let Some(id) = id {
+        if !post_exists(&dir_config, &id) {
+            bail!("No post exists with that id");
+        }
+        return Ok(id);
+    }
+    if let Some(id) =
+        find_untranscribed_post(&dir_config).with_context(|| "Trying to find post to transcribe")?
+    {
+        return Ok(id);
+    }
+    bail!("No posts to transcribe");
 }
 
 fn post_exists(dir_config: &DirConfig, id: &str) -> bool {
@@ -230,6 +380,18 @@ fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
     if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
         let svg_file_path = path.join("esperanto.svg");
         Ok(!svg_file_path.exists())
+    })? {
+        return Ok(Some(id));
+    }
+
+    Ok(None)
+}
+
+fn find_untranscribed_post(dir_config: &DirConfig) -> Result<Option<String>> {
+    if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
+        let transcript_file_path = path.join("transcript");
+        let svg_file_path = path.join("esperanto.svg");
+        Ok(!transcript_file_path.exists() && svg_file_path.exists())
     })? {
         return Ok(Some(id));
     }
@@ -423,15 +585,6 @@ struct DirConfig {
     pub old_posts_dir: PathBuf,
 }
 
-macro_rules! command {
-    (
-        $name:expr, $( $arg:expr ),* $(,)?
-    ) => {{
-        Command::new($name)
-            $( .arg($arg) )*
-    }};
-}
-
 fn get_recent_date(dir_config: &DirConfig) -> Result<NaiveDate> {
     if !dir_config.recently_shown_file.exists() {
         bail!("Cache file does not yet exist");
@@ -491,16 +644,14 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
     append_recent_date(dir_config, date).with_context(|| "Failed to append to cache file")?;
 
     command!(
-        "nsxiv",
+        async "nsxiv",
         "--fullscreen",
         "--scale-mode",
         "f", // fit
         "--class",
         "garfutils-show",
         path,
-    )
-    .spawn()
-    .with_context(|| "Failed to open image viewer")?;
+    )?;
 
     Ok(())
 }

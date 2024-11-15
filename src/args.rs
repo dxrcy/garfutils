@@ -62,6 +62,6 @@ pub enum Command {
     #[clap(alias = "t")]
     Transcribe {
         /// Id of the post to transcribe
-        id: String,
+        id: Option<String>,
     },
 }
