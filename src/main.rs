@@ -575,9 +575,9 @@ fn show_comic(location: &Location, date: Option<NaiveDate>) -> Result<()> {
             (date, path)
         }
         None => {
-            // TODO(fix): check if length == 0
             let path = get_random_directory_entry(&source_dir)
                 .with_context(|| "Failed to read comics directory")?
+                .with_context(|| "No comics found")?
                 .path();
             let date = get_date_from_path(&path).with_context(|| {
                 "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
@@ -616,12 +616,15 @@ fn append_recent_date(location: &Location, date: NaiveDate) -> io::Result<()> {
     Ok(())
 }
 
-fn get_random_directory_entry(directory: impl AsRef<Path>) -> io::Result<DirEntry> {
+fn get_random_directory_entry(directory: impl AsRef<Path>) -> io::Result<Option<DirEntry>> {
     let count = count_directory_entries(&directory)?;
+    if count == 0 {
+        return Ok(None);
+    }
     let index = random::with_rng(|rng| rng.gen_range(0..count));
     let entry = get_nth_directory_entry(&directory, index)?
         .expect("generated index should be in range of directory entry count");
-    Ok(entry)
+    Ok(Some(entry))
 }
 
 fn get_nth_directory_entry(
