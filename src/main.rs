@@ -34,17 +34,15 @@ struct Location {
 }
 
 impl Location {
-    // TODO(refactor): Rename these constants
-    const LOCATION_NAME: &str = "garfutils";
-
-    const ORIGINAL_COMICS_NAME: &str = "source";
-    const GENERATED_POSTS_NAME: &str = "generated";
-    const COMPLETED_POSTS_NAME: &str = "posts";
-    const OLD_POSTS_NAME: &str = "old";
-    const TEMP_NAME: &str = "tmp"; // Not using `/tmp` to ensure same mount point as destination
-    const CACHE_FILE_NAME: &str = "recent";
-    const WATERMARKS_NAME: &str = "watermarks";
-    const ICON_NAME: &str = "icon.png";
+    const DEFAULT_LOCATION_NAME: &str = "garfutils"; // $XDG_DATA_DIR/<name>/
+    const SOURCE_DIR: &str = "source";
+    const GENERATED_DIR: &str = "generated";
+    const POSTS_DIR: &str = "posts";
+    const OLD_DIR: &str = "old";
+    const TEMP_DIR: &str = "tmp"; // Not using `/tmp` to ensure same mount point as destination
+    const RECENT_FILE: &str = "recent";
+    const WATERMARKS_FILE: &str = "watermarks";
+    const ICON_FILE: &str = "icon.png";
 
     pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
         let base_dir = Self::get_base_dir(base_dir)?;
@@ -54,28 +52,28 @@ impl Location {
     }
 
     pub fn source_dir(&self) -> PathBuf {
-        self.base_dir.join(Self::ORIGINAL_COMICS_NAME)
+        self.base_dir.join(Self::SOURCE_DIR)
     }
     pub fn generated_dir(&self) -> PathBuf {
-        self.base_dir.join(Self::GENERATED_POSTS_NAME)
+        self.base_dir.join(Self::GENERATED_DIR)
     }
-    pub fn completed_dir(&self) -> PathBuf {
-        self.base_dir.join(Self::COMPLETED_POSTS_NAME)
+    pub fn posts_dir(&self) -> PathBuf {
+        self.base_dir.join(Self::POSTS_DIR)
     }
     pub fn old_dir(&self) -> PathBuf {
-        self.base_dir.join(Self::OLD_POSTS_NAME)
+        self.base_dir.join(Self::OLD_DIR)
     }
     pub fn temp_dir(&self) -> PathBuf {
-        self.base_dir.join(Self::TEMP_NAME)
+        self.base_dir.join(Self::TEMP_DIR)
     }
     pub fn recent_file(&self) -> PathBuf {
-        self.base_dir.join(Self::CACHE_FILE_NAME)
+        self.base_dir.join(Self::RECENT_FILE)
     }
     pub fn watermarks_file(&self) -> PathBuf {
-        self.base_dir.join(Self::WATERMARKS_NAME)
+        self.base_dir.join(Self::WATERMARKS_FILE)
     }
     pub fn icon_file(&self) -> PathBuf {
-        self.base_dir.join(Self::ICON_NAME)
+        self.base_dir.join(Self::ICON_FILE)
     }
 
     fn get_base_dir(base_dir: Option<PathBuf>) -> Result<PathBuf> {
@@ -83,7 +81,7 @@ impl Location {
             return Ok(path);
         }
         if let Some(path) = dirs_next::data_dir() {
-            return Ok(path.join(Self::LOCATION_NAME));
+            return Ok(path.join(Self::DEFAULT_LOCATION_NAME));
         }
         bail!(
             "Failed to read standard data location.\n\
@@ -103,12 +101,12 @@ impl Location {
 
         // TODO(opt): Use function pointers?
         let expected_sub_dirs = [
-            (self.source_dir(), Self::ORIGINAL_COMICS_NAME, true),
-            (self.generated_dir(), Self::GENERATED_POSTS_NAME, true),
-            (self.completed_dir(), Self::COMPLETED_POSTS_NAME, true),
-            (self.old_dir(), Self::OLD_POSTS_NAME, true),
-            (self.watermarks_file(), Self::WATERMARKS_NAME, false),
-            (self.icon_file(), Self::ICON_NAME, false),
+            (self.source_dir(), Self::SOURCE_DIR, true),
+            (self.generated_dir(), Self::GENERATED_DIR, true),
+            (self.posts_dir(), Self::POSTS_DIR, true),
+            (self.old_dir(), Self::OLD_DIR, true),
+            (self.watermarks_file(), Self::WATERMARKS_FILE, false),
+            (self.icon_file(), Self::ICON_FILE, false),
         ];
         for (path, name, is_dir) in expected_sub_dirs {
             let is_correct_kind = if is_dir {
@@ -146,11 +144,11 @@ impl Location {
                 Alternatively, run this program with the `--location <LOCATION>` option.\
             ",
             self.base_dir.to_string_lossy(),
-            Self::ORIGINAL_COMICS_NAME,
-            Self::GENERATED_POSTS_NAME,
-            Self::COMPLETED_POSTS_NAME,
-            Self::WATERMARKS_NAME,
-            Self::ICON_NAME,
+            Self::SOURCE_DIR,
+            Self::GENERATED_DIR,
+            Self::POSTS_DIR,
+            Self::WATERMARKS_FILE,
+            Self::ICON_FILE,
         )
     }
 }
@@ -271,7 +269,7 @@ fn transcribe_post(location: &Location, id: &str) -> Result<()> {
     let mut temp_file_path = temp_dir.join("transcript");
     temp_file_path.set_extension(id);
 
-    let completed_dir = location.completed_dir().join(id);
+    let completed_dir = location.posts_dir().join(id);
 
     let transcript_file_path = completed_dir.join(TRANSCRIPT_NAME);
     let esperanto_file_path = completed_dir.join(IMAGE_ESPERANTO_NAME);
@@ -333,7 +331,7 @@ fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<
 }
 
 fn revise_post(location: &Location, id: &str) -> Result<()> {
-    let completed_dir = location.completed_dir();
+    let completed_dir = location.posts_dir();
 
     let date_file_path = completed_dir.join(id).join("date");
     let date_file = fs::read_to_string(date_file_path)?;
@@ -440,11 +438,11 @@ fn get_transcribe_id(location: &Location, id: Option<String>) -> Result<String> 
 }
 
 fn post_exists(location: &Location, id: &str) -> bool {
-    location.completed_dir().join(id).is_dir()
+    location.posts_dir().join(id).is_dir()
 }
 
 fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
-    let completed_dir = location.completed_dir();
+    let completed_dir = location.posts_dir();
 
     if let Some(id) = find_post(&completed_dir, |path| {
         let svg_file_path = path.join(IMAGE_SVG_NAME);
@@ -475,7 +473,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
 }
 
 fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
-    let completed_dir = location.completed_dir();
+    let completed_dir = location.posts_dir();
 
     if let Some(id) = find_post(&completed_dir, |path| {
         let transcript_file_path = path.join(TRANSCRIPT_NAME);
@@ -580,7 +578,7 @@ fn make_post(
     {
         bail!("There already exists an incomplete post with that date");
     }
-    if exists_post_with_date(&location.completed_dir(), date)
+    if exists_post_with_date(&location.posts_dir(), date)
         .with_context(|| "Checking if post already exists")?
         && !skip_post_check
     {
