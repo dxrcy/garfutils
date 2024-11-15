@@ -22,7 +22,7 @@ const OLD_POSTS_NAME: &str = "old";
 const LOCATION_NAME: &str = "garfutils";
 // Not using `/tmp` to ensure same mount point as destination
 const TEMP_NAME: &str = "tmp";
-const CACHE_FILE_NAME: &str = "garfutils.recent";
+const CACHE_FILE_NAME: &str = "recent";
 
 const IMAGE_ESPERANTO_NAME: &str = "esperanto.png";
 const IMAGE_ENGLISH_NAME: &str = "english.png";
@@ -38,6 +38,7 @@ const IMAGE_CLASS_SHOW: &str = "garfutils-show";
 
 const ORIGINAL_COMIC_FORMAT: &str = "png";
 
+// TODO(feat): Read watermarks from file
 const WATERMARKS: &[&str] = &[
     "GarfEO",
     "@garfield.eo.v2",
@@ -51,9 +52,10 @@ const WATERMARKS: &[&str] = &[
     "garf-eo",
 ];
 
+// TODO(feat): Read icon from file
 const ICON_DATA: &[u8] = include_bytes!("../icon.png");
 
-fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
+fn get_dir_config(location: Option<PathBuf>) -> Result<DirConfig> {
     let Some(location) =
         location.or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
     else {
@@ -64,23 +66,13 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         );
     };
 
-    let Some(cache_file) =
-        cache_file.or_else(|| dirs_next::cache_dir().map(|dir| dir.join(CACHE_FILE_NAME)))
-    else {
-        bail!(
-            "Failed to read standard cache location.\n\
-            For *nix systems, try setting `$XDG_CACHE_HOME` or `$HOME` environment variables.\n\
-            Alternatively, run this program with the `--cache-file <CACHE_FILE>` option."
-        );
-    };
-
     let dir_config = DirConfig {
         original_comics_dir: location.join(ORIGINAL_COMICS_NAME),
         generated_posts_dir: location.join(GENERATED_POSTS_NAME),
         completed_posts_dir: location.join(COMPLETED_POSTS_NAME),
         old_posts_dir: location.join(OLD_POSTS_NAME),
         temp_dir: location.join(TEMP_NAME),
-        recently_shown_file: cache_file,
+        recently_shown_file: location.join(CACHE_FILE_NAME),
     };
 
     if !location.exists() || !location.is_dir() {
@@ -117,7 +109,7 @@ fn main() -> Result<()> {
     random::init_rng();
 
     let args = args::Args::parse();
-    let dir_config = get_dir_config(args.location, args.cache_file)?;
+    let dir_config = get_dir_config(args.location)?;
 
     match args.command {
         args::Command::Show { date } => {

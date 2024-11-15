@@ -18,11 +18,6 @@ pub struct Args {
     /// Expects sub-directories `comics`, `generated`, `completed`, each of which may be symlinks
     #[arg(long)]
     pub location: Option<PathBuf>,
-    /// Cache file path
-    ///
-    /// Default: `$XDG_CONFIG_HOME/garfutils.recent` or `$HOME/.cache/garfutils.recent`
-    #[arg(long)]
-    pub cache_file: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
