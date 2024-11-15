@@ -29,9 +29,6 @@ const IMAGE_CLASS_SHOW: &str = "garfutils-show";
 
 const ORIGINAL_COMIC_FORMAT: &str = "png";
 
-// TODO(feat): Read icon from file
-const ICON_DATA: &[u8] = include_bytes!("../icon.png");
-
 struct Location {
     base_dir: PathBuf,
 }
@@ -49,6 +46,7 @@ impl Location {
     const TEMP_NAME: &str = "tmp";
     const CACHE_FILE_NAME: &str = "recent";
     const WATERMARKS_NAME: &str = "watermarks";
+    const ICON_NAME: &str = "icon.png";
 
     pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
         let base_dir = Self::get_base_dir(base_dir)?;
@@ -78,6 +76,9 @@ impl Location {
     pub fn watermarks_file(&self) -> PathBuf {
         self.base_dir.join(Self::WATERMARKS_NAME)
     }
+    pub fn icon_file(&self) -> PathBuf {
+        self.base_dir.join(Self::ICON_NAME)
+    }
 
     fn get_base_dir(base_dir: Option<PathBuf>) -> Result<PathBuf> {
         if let Some(path) = base_dir {
@@ -103,12 +104,14 @@ impl Location {
             );
         }
 
+        // TODO(opt): Use function pointers?
         let expected_sub_dirs = [
             (self.source_dir(), Self::ORIGINAL_COMICS_NAME, true),
             (self.generated_dir(), Self::GENERATED_POSTS_NAME, true),
             (self.completed_dir(), Self::COMPLETED_POSTS_NAME, true),
             (self.old_dir(), Self::OLD_POSTS_NAME, true),
             (self.watermarks_file(), Self::WATERMARKS_NAME, false),
+            (self.icon_file(), Self::ICON_NAME, false),
         ];
         for (path, name, is_dir) in expected_sub_dirs {
             let correct_kind = if is_dir {
@@ -553,18 +556,13 @@ fn make_post(
     let generated_comic_path = output_dir.join(IMAGE_ENGLISH_NAME);
     let duplicate_comic_path = output_dir.join(IMAGE_ESPERANTO_NAME);
 
-    let icon = image::load_from_memory(ICON_DATA).expect("load static icon as image");
+    let icon = image::open(location.icon_file()).with_context(|| "Failed to open icon image")?;
 
     let watermark = get_random_watermark(location).with_context(|| "Failed to get watermark")?;
 
     if !original_comic_path.exists() {
         bail!("Not the date of a real comic");
     }
-
-    // if !generated_dir.exists() {
-    //     fs::create_dir_all(&generated_dir)
-    //         .with_context(|| "Failed to create generated posts directory")?;
-    // }
 
     if exists_post_with_date(&generated_dir, date)
         .with_context(|| "Checking if post already generated")?
