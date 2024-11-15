@@ -2,9 +2,11 @@ mod args;
 mod random;
 
 use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{self, Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
@@ -12,45 +14,6 @@ use anyhow::{bail, Context, Result};
 use chrono::{Datelike, NaiveDate};
 use clap::Parser;
 use rand::Rng;
-
-macro_rules! command {
-    ( #[spawn] $name:expr, $( $arg:expr ),* $(,)? ) => {{
-        let mut command = ::std::process::Command::new($name);
-        $( command.arg($arg); )*
-        command
-            .spawn() // Spawn child process
-            .with_context(|| format!(
-                "Failed to spawn `{}` command with arguments: {:#?}",
-                $name, command.get_args(),
-            ))
-    }};
-
-    ( #[inherit_stdio] $name:expr, $( $arg:expr ),* $(,)? ) => {{
-        let mut command = ::std::process::Command::new($name);
-        $( command.arg($arg); )*
-        command
-            // Inherit standard io streams (makes vim work)
-            .stdin (::std::process::Stdio::inherit())
-            .stdout(::std::process::Stdio::inherit())
-            .stderr(::std::process::Stdio::inherit())
-            .output() // Block execution
-            .with_context(|| format!(
-                "Failed to run `{}` command with arguments: {:#?}",
-                $name, command.get_args(),
-            ))
-    }};
-
-    ( $name:expr, $( $arg:expr ),* $(,)? ) => {{
-        let mut command = ::std::process::Command::new($name);
-        $( command.arg($arg); )*
-        command
-            .output() // Block execution
-            .with_context(|| format!(
-                "Failed to run `{}` command with arguments: {:#?}",
-                $name, command.get_args(),
-            ))
-    }};
-}
 
 const ORIGINAL_COMICS_NAME: &str = "comics";
 const GENERATED_POSTS_NAME: &str = "generated";
@@ -183,6 +146,77 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+fn spawn_image_viewer(paths: &[impl AsRef<OsStr>], class: &str, fullscreen: bool) -> Result<()> {
+    let mut command = Command::new("nsxiv");
+    command.arg("--class").arg(class);
+    if fullscreen {
+        command.args([
+            "--fullscreen",
+            "--scale-mode",
+            "f", // fit
+        ]);
+    }
+    command
+        .args(paths)
+        .spawn()
+        .with_context(|| "Failed to spawn image viewer")?;
+    Ok(())
+}
+
+fn kill_process_class(class: &str) -> Result<()> {
+    Command::new("pkill")
+        .arg("--full")
+        .arg(class)
+        .status()
+        .with_context(|| "Failed to kill image viewer")?;
+    Ok(())
+}
+
+fn open_editor(path: impl AsRef<OsStr>) -> Result<()> {
+    Command::new("nvim")
+        .arg(path)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| "Failed to open editor")?;
+    Ok(())
+}
+
+fn bspc_command(args: &[impl AsRef<OsStr>]) -> Result<process::Output> {
+    let output = Command::new("bspc")
+        .args(args)
+        .output()
+        .with_context(|| "Failed to run bspc command")?;
+    Ok(output)
+}
+
+/// BSPWM-specific functionality
+fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>]) -> Result<()> {
+    // Window ID of main window (terminal)
+    let bspc_node = bspc_command(&["query", "-N", "-n"])?.stdout;
+    let bspc_node = std::str::from_utf8(&bspc_node)
+        .expect("commmand result should be utf-8")
+        .trim();
+
+    // Temporary hide currently focused window
+    // To avoid attaching image viewer to `tabbed` instance
+    bspc_command(&["node", &bspc_node, "-g", "hidden"])?;
+
+    spawn_image_viewer(paths, IMAGE_CLASS_TRANSCRIBE, false)?;
+    // Wait for image viewer to completely start
+    thread::sleep(Duration::from_millis(50));
+
+    // Unhide main window
+    // Move image viewer to left, resize slightly, re-focus main window
+    bspc_command(&["node", &bspc_node, "-g", "hidden"])?;
+    bspc_command(&["node", "-s", "west"])?;
+    bspc_command(&["node", "-z", "right", "-200", "0"])?;
+    bspc_command(&["node", "-f", "east"])?;
+
+    Ok(())
+}
+
 fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     if !dir_config.temp_dir.exists() {
         fs::create_dir_all(&dir_config.temp_dir)
@@ -199,36 +233,9 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     let esperanto_file_path = completed_dir.join(IMAGE_ESPERANTO_NAME);
     let english_file_path = completed_dir.join(IMAGE_ENGLISH_NAME);
 
-    // Kill previous instance of image viewer
-    command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
+    kill_process_class(IMAGE_CLASS_TRANSCRIBE)?;
 
-    // ******** !!! BSPWM-SPECIFIC FUNCTIONALITY !!! ********
-    // Window ID of main window (terminal)
-    let bspc_node = command!["bspc", "query", "-N", "-n"]?.stdout;
-    let bspc_node = std::str::from_utf8(&bspc_node)
-        .expect("commmand result should be utf-8")
-        .trim();
-    // Temporary hide currently focused window
-    // To avoid attaching image viewer to `tabbed` instance
-    command!["bspc", "node", &bspc_node, "-g", "hidden"]?;
-    // Spawn image viewer
-    command![
-        #[spawn]
-        "nsxiv",
-        esperanto_file_path,
-        english_file_path,
-        "--class",
-        IMAGE_CLASS_TRANSCRIBE,
-    ]?;
-    // Wait for image viewer to completely start
-    thread::sleep(Duration::from_millis(50));
-    // Unhide main window
-    command!["bspc", "node", &bspc_node, "-g", "hidden"]?;
-    // Move image viewer to left, resize slightly, re-focus main window
-    command!["bspc", "node", "-s", "west"]?;
-    command!["bspc", "node", "-z", "right", "-200", "0"]?;
-    command!["bspc", "node", "-f", "east"]?;
-    // ******************************************************
+    setup_image_viewer_window(&[esperanto_file_path, english_file_path])?;
 
     let transcript_template = if transcript_file_path.exists() {
         println!("(transcript file already exists)");
@@ -246,13 +253,9 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     fs::write(&temp_file_path, &*transcript_template)
         .with_context(|| "Failed to write template transcript file")?;
 
-    command![
-        #[inherit_stdio]
-        "nvim",
-        &temp_file_path
-    ]?;
+    open_editor(&temp_file_path)?;
 
-    command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
+    kill_process_class(IMAGE_CLASS_TRANSCRIBE)?;
 
     if file_matches_string(&temp_file_path, &transcript_template)
         .with_context(|| "Failed to compare transcript file against previous version")?
@@ -659,17 +662,8 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
 
     append_recent_date(dir_config, date).with_context(|| "Failed to append to cache file")?;
 
-    command!["pkill", "--full", IMAGE_CLASS_SHOW]?;
-    command![
-        #[spawn]
-        "nsxiv",
-        "--fullscreen",
-        "--scale-mode",
-        "f", // fit
-        "--class",
-        IMAGE_CLASS_SHOW,
-        path,
-    ]?;
+    kill_process_class(IMAGE_CLASS_SHOW)?;
+    spawn_image_viewer(&[path], IMAGE_CLASS_SHOW, true)?;
 
     Ok(())
 }
