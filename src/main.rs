@@ -37,10 +37,9 @@ impl Location {
     // TODO(refactor): Rename these constants
     const LOCATION_NAME: &str = "garfutils";
 
-    // TODO(feat): Possibly rename these directories
-    const ORIGINAL_COMICS_NAME: &str = "comics";
-    const GENERATED_POSTS_NAME: &str = "generated";
-    const COMPLETED_POSTS_NAME: &str = "completed";
+    const ORIGINAL_COMICS_NAME: &str = "source";
+    const GENERATED_POSTS_NAME: &str = "future";
+    const COMPLETED_POSTS_NAME: &str = "posts";
     const OLD_POSTS_NAME: &str = "old";
     // Not using `/tmp` to ensure same mount point as destination
     const TEMP_NAME: &str = "tmp";
@@ -95,12 +94,17 @@ impl Location {
     }
 
     fn check_dirs_exist(&self) -> Result<()> {
-        if !self.base_dir.exists() || !self.base_dir.is_dir() {
+        if !self.base_dir.is_dir() {
             bail!(
                 "Location is not a directory: {:?}.\n\
-                Please create the directory with sub-directories `comics`, `generated`, and `completed`, \
-                each of which may be symlinks.",
+                Please create the directory with sub-directories `{}`, `{}`, and `{}`,\
+                and files `{}` and `{}` each of which may be symlinks.",
                 self.base_dir,
+                Self::ORIGINAL_COMICS_NAME,
+                Self::GENERATED_POSTS_NAME,
+                Self::COMPLETED_POSTS_NAME,
+                Self::WATERMARKS_NAME,
+                Self::ICON_NAME,
             );
         }
 
