@@ -57,6 +57,8 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
     const COMPLETED_POSTS_NAME: &str = "completed";
     const OLD_POSTS_NAME: &str = "old";
     const LOCATION_NAME: &str = "garfutils";
+    // Not using `/tmp` to ensure same mount point as destination
+    const TEMP_NAME: &str = "tmp";
     const CACHE_FILE_NAME: &str = "garfutils.recent";
 
     let Some(location) =
@@ -84,6 +86,7 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         generated_posts_dir: location.join(GENERATED_POSTS_NAME),
         completed_posts_dir: location.join(COMPLETED_POSTS_NAME),
         old_posts_dir: location.join(OLD_POSTS_NAME),
+        temp_dir: location.join(TEMP_NAME),
         recently_shown_file: cache_file,
     };
 
@@ -101,6 +104,7 @@ fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Res
         (&dir_config.generated_posts_dir, GENERATED_POSTS_NAME),
         (&dir_config.completed_posts_dir, COMPLETED_POSTS_NAME),
         (&dir_config.old_posts_dir, OLD_POSTS_NAME),
+        // Don't check temp directory
     ] {
         if !path.exists() || !path.is_dir() {
             bail!(
@@ -152,15 +156,13 @@ fn main() -> Result<()> {
 }
 
 fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
-    // TODO(refactor): Move to `DirConfig`
-    // Not using `/tmp` to ensure same mount point as destination
-    let temp_directory = Path::new("/home/darcy/.local/share/garfutils/tmp/");
-    if !temp_directory.exists() {
-        fs::create_dir_all(temp_directory)
+    if !dir_config.temp_dir.exists() {
+        fs::create_dir_all(&dir_config.temp_dir)
             .with_context(|| "Failed to create temp directory for transcript file")?;
     }
 
-    let mut temp_file_path = temp_directory.join("transcript.");
+    // "{temp_dir}/transcript.{id}"
+    let mut temp_file_path = dir_config.temp_dir.join("transcript");
     temp_file_path.set_extension(&id);
 
     let esperanto_file_path = dir_config
@@ -577,10 +579,11 @@ fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Re
 
 struct DirConfig {
     pub original_comics_dir: PathBuf,
-    pub recently_shown_file: PathBuf,
     pub generated_posts_dir: PathBuf,
     pub completed_posts_dir: PathBuf,
     pub old_posts_dir: PathBuf,
+    pub temp_dir: PathBuf,
+    pub recently_shown_file: PathBuf,
 }
 
 fn get_recent_date(dir_config: &DirConfig) -> Result<NaiveDate> {
