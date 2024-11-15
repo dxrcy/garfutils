@@ -13,7 +13,7 @@ use clap::Parser;
 use rand::Rng;
 
 macro_rules! command {
-    ( async $name:expr, $( $arg:expr ),* $(,)? ) => {{
+    ( #[spawn] $name:expr, $( $arg:expr ),* $(,)? ) => {{
         let mut command = ::std::process::Command::new($name);
         $( command.arg($arg); )*
         command
@@ -24,7 +24,7 @@ macro_rules! command {
             ))
     }};
 
-    ( become $name:expr, $( $arg:expr ),* $(,)? ) => {{
+    ( #[inherit_stdio] $name:expr, $( $arg:expr ),* $(,)? ) => {{
         let mut command = ::std::process::Command::new($name);
         $( command.arg($arg); )*
         command
@@ -224,7 +224,8 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     command!["bspc", "node", &bspc_node, "-g", "hidden"]?;
     // Spawn image viewer
     command![
-        async "nsxiv",
+        #[spawn]
+        "nsxiv",
         esperanto_file_path,
         english_file_path,
         "--class",
@@ -257,7 +258,11 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     fs::write(&temp_file_path, &transcript_template)
         .with_context(|| "Failed to write template transcript file")?;
 
-    command![become "nvim", &temp_file_path]?;
+    command![
+        #[inherit_stdio]
+        "nvim",
+        &temp_file_path
+    ]?;
 
     command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
 
@@ -658,7 +663,8 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
 
     command!["pkill", "--full", IMAGE_CLASS_SHOW]?;
     command![
-        async "nsxiv",
+        #[spawn]
+        "nsxiv",
         "--fullscreen",
         "--scale-mode",
         "f", // fit
