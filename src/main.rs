@@ -38,11 +38,10 @@ impl Location {
     const LOCATION_NAME: &str = "garfutils";
 
     const ORIGINAL_COMICS_NAME: &str = "source";
-    const GENERATED_POSTS_NAME: &str = "future";
+    const GENERATED_POSTS_NAME: &str = "generated";
     const COMPLETED_POSTS_NAME: &str = "posts";
     const OLD_POSTS_NAME: &str = "old";
-    // Not using `/tmp` to ensure same mount point as destination
-    const TEMP_NAME: &str = "tmp";
+    const TEMP_NAME: &str = "tmp"; // Not using `/tmp` to ensure same mount point as destination
     const CACHE_FILE_NAME: &str = "recent";
     const WATERMARKS_NAME: &str = "watermarks";
     const ICON_NAME: &str = "icon.png";
@@ -96,15 +95,9 @@ impl Location {
     fn check_dirs_exist(&self) -> Result<()> {
         if !self.base_dir.is_dir() {
             bail!(
-                "Location is not a directory: {:?}.\n\
-                Please create the directory with sub-directories `{}`, `{}`, and `{}`,\
-                and files `{}` and `{}` each of which may be symlinks.",
-                self.base_dir,
-                Self::ORIGINAL_COMICS_NAME,
-                Self::GENERATED_POSTS_NAME,
-                Self::COMPLETED_POSTS_NAME,
-                Self::WATERMARKS_NAME,
-                Self::ICON_NAME,
+                "Location is not a directory: `{}`.\n{}",
+                self.base_dir.to_string_lossy(),
+                self.format_dir_structure(),
             );
         }
 
@@ -118,33 +111,47 @@ impl Location {
             (self.icon_file(), Self::ICON_NAME, false),
         ];
         for (path, name, is_dir) in expected_sub_dirs {
-            let correct_kind = if is_dir {
+            let is_correct_kind = if is_dir {
                 path.is_dir()
             } else {
                 path.is_file()
             };
-            if !correct_kind {
-                if is_dir {
-                    bail!(
-                        "Location is missing sub-directory: `{0}`\n\
-                        in {1:?}\n\
-                        Please create the directory with sub-directory `{0}`, which may be symlink.",
-                        name,
-                        self.base_dir,
-                    );
-                } else {
-                    bail!(
-                        "Location is missing file: `{0}`\n\
-                        in {1:?}\n\
-                        Please create the directory with file `{0}`, which may be symlink.",
-                        name,
-                        self.base_dir,
-                    );
-                }
+            if !is_correct_kind {
+                bail!(
+                    "Location is missing {}: `{}`\n{}",
+                    if is_dir { "sub-directory" } else { "file" },
+                    name,
+                    self.format_dir_structure()
+                );
             }
         }
 
         Ok(())
+    }
+
+    fn format_dir_structure(&self) -> String {
+        format!(
+            "\
+                \n\
+                Please ensure that these files and directories exist.\n\
+                Each item may be a symlink.\n\
+                \n\
+                \x1b[4m{}/\x1b[0m\n\
+                    \t├─ {}/\n\
+                    \t├─ {}/\n\
+                    \t├─ {}/\n\
+                    \t├─ {}\n\
+                    \t└─ {}\n\
+                \n\
+                Alternatively, run this program with the `--location <LOCATION>` option.\
+            ",
+            self.base_dir.to_string_lossy(),
+            Self::ORIGINAL_COMICS_NAME,
+            Self::GENERATED_POSTS_NAME,
+            Self::COMPLETED_POSTS_NAME,
+            Self::WATERMARKS_NAME,
+            Self::ICON_NAME,
+        )
     }
 }
 
@@ -677,7 +684,7 @@ where
         if !new_line.trim().is_empty() {
             match NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d") {
                 Ok(new_date) => date = Some(new_date),
-                Err(error) => bail!("Cache file contains invalid date: {:?}", error),
+                Err(error) => bail!("Cache file contains invalid date: {}", error),
             }
         }
     }
