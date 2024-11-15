@@ -371,6 +371,7 @@ fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
     if let Some(id) =
         find_unrevised_post(dir_config).with_context(|| "Trying to find post to revise")?
     {
+        println!("Post id: {}", id);
         return Ok(id);
     }
     bail!("No posts to revise");
@@ -386,6 +387,7 @@ fn get_transcribe_id(dir_config: &DirConfig, id: Option<String>) -> Result<Strin
     if let Some(id) =
         find_untranscribed_post(dir_config).with_context(|| "Trying to find post to transcribe")?
     {
+        println!("Post id: {}", id);
         return Ok(id);
     }
     bail!("No posts to transcribe");
@@ -593,7 +595,9 @@ fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Re
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-    get_recent_date(dir_config).with_context(|| "Failed to get recent date")
+    let recent_date = get_recent_date(dir_config).with_context(|| "Failed to get recent date")?;
+    println!("Date: {}", recent_date);
+    Ok(recent_date)
 }
 
 struct DirConfig {
