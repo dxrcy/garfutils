@@ -99,17 +99,17 @@ impl Location {
             );
         }
 
-        // TODO(opt): Use function pointers?
-        let expected_sub_dirs = [
-            (self.source_dir(), Self::SOURCE_DIR, true),
-            (self.generated_dir(), Self::GENERATED_DIR, true),
-            (self.posts_dir(), Self::POSTS_DIR, true),
-            (self.old_dir(), Self::OLD_DIR, true),
-            (self.watermarks_file(), Self::WATERMARKS_FILE, false),
-            (self.icon_file(), Self::ICON_FILE, false),
+        let expected_sub_dirs: &[(fn(_) -> _, _, _)] = &[
+            (Self::source_dir, Self::SOURCE_DIR, true),
+            (Self::generated_dir, Self::GENERATED_DIR, true),
+            (Self::posts_dir, Self::POSTS_DIR, true),
+            (Self::old_dir, Self::OLD_DIR, true),
+            (Self::watermarks_file, Self::WATERMARKS_FILE, false),
+            (Self::icon_file, Self::ICON_FILE, false),
         ];
-        for (path, name, is_dir) in expected_sub_dirs {
-            let is_correct_kind = if is_dir {
+        for (path_fn, name, is_dir) in expected_sub_dirs {
+            let path = path_fn(self);
+            let is_correct_kind = if *is_dir {
                 path.is_dir()
             } else {
                 path.is_file()
@@ -117,7 +117,7 @@ impl Location {
             if !is_correct_kind {
                 bail!(
                     "Location is missing {}: `{}`\n{}",
-                    if is_dir { "sub-directory" } else { "file" },
+                    if *is_dir { "sub-directory" } else { "file" },
                     name,
                     self.format_dir_structure()
                 );
