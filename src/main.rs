@@ -227,7 +227,14 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         .expect("commmand result should be utf-8")
         .trim();
 
+    // For whatever reason, running this command creates some weird behaviour,
+    // where the user entering CTRL-C (anytime from now until the end of the
+    // program) causes the `tabbed` session to be killed. I'm at a loss as to
+    // why. The user just has to make sure not to enter CTRL-C I suppose.
+    // The later confirmation input uses a dirty hack to capture CTRL-C and
+    // cancel the input rather than kill the program.
     command!["tabc", "detach", bspc_node]?;
+
     thread::sleep(Duration::from_millis(100));
 
     command!["bspc", "node", "-s", "west"]?;
@@ -263,7 +270,7 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         return Ok(());
     }
 
-    print_confirmation("Save transcript file? ");
+    print_confirmation_hack("Save transcript file? ");
 
     fs::rename(temp_file_path, &transcript_file_path)
         .with_context(|| "Failed to move temporary file to save transcript")?;
@@ -329,6 +336,13 @@ fn print_confirmation(prompt: &str) {
     print!("{}", prompt);
     io::stdout().flush().expect("failed to flush stdout");
     stdin_read_and_discard();
+}
+
+fn print_confirmation_hack(prompt: &str) {
+    print!("{}", prompt);
+    io::stdout().flush().expect("failed to flush stdout");
+    // dirty hack
+    command![become "sh", "-c", "read -r"].expect("failed to run `sh -c 'read -r'`");
 }
 
 fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
