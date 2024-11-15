@@ -161,10 +161,9 @@ fn main() -> Result<()> {
             show_comic(&dir_config, date)?;
         }
 
-        args::Command::Make { date, recent, name } => {
+        args::Command::Make { date, recent } => {
             let date = get_date(&dir_config, date, recent).with_context(|| "Failed to get date")?;
-            // TODO(feat): Remove `--name` (unused)
-            let name = name.unwrap_or_else(|| get_unique_name(date));
+            let name = get_unique_name(date);
             make_post(&dir_config, date, &name, false).with_context(|| "Failed to make post")?;
         }
 

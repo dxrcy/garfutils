@@ -44,9 +44,6 @@ pub enum Command {
         /// Use most recently displayed comic `show` instead of specifying a date
         #[arg(short, long, group("date_group"))]
         recent: bool,
-        /// Name of directory (defaults to a unique string)
-        #[arg(short, long)]
-        name: Option<String>,
     },
 
     /// Recreate an existing post, given an id
