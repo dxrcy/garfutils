@@ -72,6 +72,8 @@ const SPECIAL_NAME: &str = "special";
 const IMAGE_CLASS_TRANSCRIBE: &str = "garfutils-transcribe";
 const IMAGE_CLASS_SHOW: &str = "garfutils-show";
 
+const ORIGINAL_COMIC_FORMAT: &str = "png";
+
 const WATERMARKS: &[&str] = &[
     "GarfEO",
     "@garfield.eo.v2",
@@ -84,6 +86,8 @@ const WATERMARKS: &[&str] = &[
     "Esperanta Garfield",
     "garf-eo",
 ];
+
+const ICON_DATA: &[u8] = include_bytes!("../icon.png");
 
 fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
     let Some(location) =
@@ -490,9 +494,8 @@ fn make_post(
     name: &str,
     skip_post_check: bool,
 ) -> Result<()> {
-    let original_comic_path = dir_config
-        .original_comics_dir
-        .join(date.to_string() + ".png");
+    let mut original_comic_path = dir_config.original_comics_dir.join(date.to_string());
+    original_comic_path.set_extension(ORIGINAL_COMIC_FORMAT);
     let generated_dir = dir_config.generated_posts_dir.join(name);
     // TODO(refactor): Define file names as constants
     let title_file_path = generated_dir.join(TITLE_NAME);
@@ -500,8 +503,7 @@ fn make_post(
     let generated_comic_path = generated_dir.join(IMAGE_ENGLISH_NAME);
     let duplicate_comic_path = generated_dir.join(IMAGE_ESPERANTO_NAME);
 
-    let icon_data = include_bytes!("../icon.png");
-    let icon = image::load_from_memory(icon_data).expect("load static icon as image");
+    let icon = image::load_from_memory(ICON_DATA).expect("load static icon as image");
 
     let watermark = get_random_watermark();
 
@@ -634,7 +636,7 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
     let (date, path) = match date {
         Some(date) => {
             let mut path = dir_config.original_comics_dir.join(date.to_string());
-            path.set_extension("png");
+            path.set_extension(ORIGINAL_COMIC_FORMAT);
             (date, path)
         }
         None => {
