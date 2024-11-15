@@ -220,24 +220,23 @@ fn revise_post(location: &Location, id: &str) -> Result<()> {
     let post_path = completed_dir.join(id);
     let generated_path = location.generated_dir().join(id);
 
-    // TODO(refactor): Inline closure manually
-    let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
+    let copy_files = [
+        (TITLE_NAME, true),
+        (TRANSCRIPT_NAME, false),
+        (PROPS_NAME, false),
+        (SPECIAL_NAME, false),
+    ];
+    for (file_name, is_required) in copy_files {
         let old_path = post_path.join(file_name);
         let new_path = generated_path.join(file_name);
         if !old_path.exists() {
-            if !required {
-                return Ok(());
+            if !is_required {
+                continue;
             }
             bail!("Post is missing `{}` file", file_name);
         }
         fs::copy(old_path, new_path)
             .with_context(|| format!("Failed to copy `{}` file", file_name))?;
-        Ok(())
-    };
-
-    copy_post_file(TITLE_NAME, true)?;
-    for file_name in [TRANSCRIPT_NAME, PROPS_NAME, SPECIAL_NAME] {
-        copy_post_file(file_name, false)?;
     }
 
     print_confirmation("Move old post to old directory?");
