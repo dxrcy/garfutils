@@ -133,12 +133,13 @@ fn main() -> Result<()> {
             // TODO(feat): Remove `--name` (unused)
             let name = name.unwrap_or_else(|| get_unique_name(date));
             make_post(&dir_config, date, &name, false).with_context(|| "Failed to make post")?;
-            println!("Created {}", name);
         }
 
         args::Command::Revise { id } => {
             let id = get_revise_id(&dir_config, id)?;
             revise_post(&dir_config, &id).with_context(|| "Failed to revise post")?;
+            print_confirmation("Transcribe now? ");
+            transcribe_post(&dir_config, &id).with_context(|| "Failed to transcribe post")?;
         }
 
         args::Command::Transcribe { id } => {
@@ -253,7 +254,6 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     let name = get_unique_name(date);
     make_post(&dir_config, date, &name, true).with_context(|| "Failed to make post")?;
-    println!("Created {}", name);
 
     let post_path = dir_config.completed_posts_dir.join(&id);
     let generated_path = dir_config.generated_posts_dir.join(&name);
@@ -289,10 +289,6 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     println!("(waiting until done...)");
     wait_for_file(&post_path)?;
-
-    print_confirmation("Transcribe now? ");
-
-    println!("TODO: transcribe");
 
     Ok(())
 }
@@ -476,8 +472,10 @@ fn make_post(
     let date_file_path = generated_dir.join("date");
     let generated_comic_path = generated_dir.join("english.png");
     let duplicate_comic_path = generated_dir.join("esperanto.png");
+
     // TODO(feat): Move icon file: Either to this crate or some location defined by dir_config
-    let icon_path = Path::new("../comic-format/icon.png");
+    let icon_data = include_bytes!("../../comic-format/icon.png");
+    let icon = image::load_from_memory(icon_data).expect("open icon image");
 
     let watermark = get_random_watermark();
 
@@ -506,7 +504,6 @@ fn make_post(
 
     fs::File::create(title_file_path).with_context(|| "Failed to create title file")?;
 
-    let icon = image::open(icon_path).with_context(|| "Failed to open icon image")?;
     let original_comic =
         image::open(original_comic_path).with_context(|| "Failed to open comic")?;
     let generated_comic = comic_format::convert_image(original_comic, &icon, watermark, 0.0);
@@ -517,6 +514,8 @@ fn make_post(
 
     fs::copy(&generated_comic_path, &duplicate_comic_path)
         .with_context(|| "Failed to copy generated image")?;
+
+    println!("Created {}", name);
 
     Ok(())
 }
