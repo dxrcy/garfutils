@@ -500,9 +500,8 @@ fn make_post(
     let generated_comic_path = generated_dir.join(IMAGE_ENGLISH_NAME);
     let duplicate_comic_path = generated_dir.join(IMAGE_ESPERANTO_NAME);
 
-    // TODO(feat): Move icon file: Either to this crate or some location defined by dir_config
-    let icon_data = include_bytes!("../../comic-format/icon.png");
-    let icon = image::load_from_memory(icon_data).expect("open icon image");
+    let icon_data = include_bytes!("../icon.png");
+    let icon = image::load_from_memory(icon_data).expect("load static icon as image");
 
     let watermark = get_random_watermark();
 
