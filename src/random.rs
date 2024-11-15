@@ -3,7 +3,7 @@ use std::cell::RefCell;
 type Rng = rand::rngs::ThreadRng;
 
 thread_local! {
-    static RNG: RefCell<Option<Rng>> = RefCell::new(None);
+    static RNG: RefCell<Option<Rng>> = const { RefCell::new(None) };
 }
 
 pub fn init_rng() {

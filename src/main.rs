@@ -191,19 +191,19 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     // "{temp_dir}/transcript.{id}"
     let mut temp_file_path = dir_config.temp_dir.join("transcript");
-    temp_file_path.set_extension(&id);
+    temp_file_path.set_extension(id);
 
     let transcript_file_path = dir_config
         .completed_posts_dir
-        .join(&id)
+        .join(id)
         .join(TRANSCRIPT_NAME);
     let esperanto_file_path = dir_config
         .completed_posts_dir
-        .join(&id)
+        .join(id)
         .join(IMAGE_ESPERANTO_NAME);
     let english_file_path = dir_config
         .completed_posts_dir
-        .join(&id)
+        .join(id)
         .join(IMAGE_ENGLISH_NAME);
 
     let id_number = id
@@ -280,15 +280,15 @@ fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<
 }
 
 fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
-    let date_file_path = dir_config.completed_posts_dir.join(&id).join("date");
+    let date_file_path = dir_config.completed_posts_dir.join(id).join("date");
     let date_file = fs::read_to_string(date_file_path)?;
     let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
         .with_context(|| "Invalid date file for post")?;
 
-    make_post(&dir_config, date, id, true).with_context(|| "Failed to make post")?;
+    make_post(dir_config, date, id, true).with_context(|| "Failed to make post")?;
 
-    let post_path = dir_config.completed_posts_dir.join(&id);
-    let generated_path = dir_config.generated_posts_dir.join(&id);
+    let post_path = dir_config.completed_posts_dir.join(id);
+    let generated_path = dir_config.generated_posts_dir.join(id);
 
     let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
         let old_path = post_path.join(file_name);
@@ -311,7 +311,7 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     print_confirmation("Move old post to old directory? ");
 
-    let old_post_path = dir_config.old_posts_dir.join(&id);
+    let old_post_path = dir_config.old_posts_dir.join(id);
     if old_post_path.exists() {
         bail!("TODO: post already revised");
     }
@@ -352,13 +352,13 @@ fn stdin_read_and_discard() {
 
 fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
     if let Some(id) = id {
-        if !post_exists(&dir_config, &id) {
+        if !post_exists(dir_config, &id) {
             bail!("No post exists with that id");
         }
         return Ok(id);
     }
     if let Some(id) =
-        find_unrevised_post(&dir_config).with_context(|| "Trying to find post to revise")?
+        find_unrevised_post(dir_config).with_context(|| "Trying to find post to revise")?
     {
         return Ok(id);
     }
@@ -367,13 +367,13 @@ fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
 
 fn get_transcribe_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
     if let Some(id) = id {
-        if !post_exists(&dir_config, &id) {
+        if !post_exists(dir_config, &id) {
             bail!("No post exists with that id");
         }
         return Ok(id);
     }
     if let Some(id) =
-        find_untranscribed_post(&dir_config).with_context(|| "Trying to find post to transcribe")?
+        find_untranscribed_post(dir_config).with_context(|| "Trying to find post to transcribe")?
     {
         return Ok(id);
     }
@@ -449,7 +449,7 @@ where
 
         return Ok(Some(file_name));
     }
-    return Ok(None);
+    Ok(None)
 }
 
 fn file_contains_line(file: File, needle: &str) -> Result<bool> {
@@ -518,10 +518,8 @@ fn make_post(
     if exists_post_with_date(&dir_config.generated_posts_dir, date)? {
         bail!("There already exists an incomplete post with that date");
     }
-    if !skip_post_check {
-        if exists_post_with_date(&dir_config.completed_posts_dir, date)? {
-            bail!("There already exists a completed post with that date");
-        }
+    if exists_post_with_date(&dir_config.completed_posts_dir, date)? && !skip_post_check {
+        bail!("There already exists a completed post with that date");
     }
 
     // Parent should already be created
@@ -548,8 +546,7 @@ fn make_post(
 }
 
 fn get_random_watermark() -> &'static str {
-    let index = random::with_rng(|rng| rng.gen_range(0..WATERMARKS.len()));
-    return WATERMARKS[index];
+    WATERMARKS[random::with_rng(|rng| rng.gen_range(0..WATERMARKS.len()))]
 }
 
 /// Skips entries with missing or malformed date file
@@ -574,7 +571,7 @@ fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool>
         }
     }
 
-    return Ok(false);
+    Ok(false)
 }
 
 fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
@@ -585,7 +582,7 @@ fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Re
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-    get_recent_date(&dir_config).with_context(|| "Failed to get recent date")
+    get_recent_date(dir_config).with_context(|| "Failed to get recent date")
 }
 
 struct DirConfig {
