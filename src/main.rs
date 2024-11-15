@@ -51,16 +51,41 @@ macro_rules! command {
     }};
 }
 
-fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
-    const ORIGINAL_COMICS_NAME: &str = "comics";
-    const GENERATED_POSTS_NAME: &str = "generated";
-    const COMPLETED_POSTS_NAME: &str = "completed";
-    const OLD_POSTS_NAME: &str = "old";
-    const LOCATION_NAME: &str = "garfutils";
-    // Not using `/tmp` to ensure same mount point as destination
-    const TEMP_NAME: &str = "tmp";
-    const CACHE_FILE_NAME: &str = "garfutils.recent";
+const ORIGINAL_COMICS_NAME: &str = "comics";
+const GENERATED_POSTS_NAME: &str = "generated";
+const COMPLETED_POSTS_NAME: &str = "completed";
+const OLD_POSTS_NAME: &str = "old";
+const LOCATION_NAME: &str = "garfutils";
+// Not using `/tmp` to ensure same mount point as destination
+const TEMP_NAME: &str = "tmp";
+const CACHE_FILE_NAME: &str = "garfutils.recent";
 
+const IMAGE_ESPERANTO_NAME: &str = "esperanto.png";
+const IMAGE_ENGLISH_NAME: &str = "english.png";
+const IMAGE_SVG_NAME: &str = "esperanto.svg";
+const TRANSCRIPT_NAME: &str = "transcript";
+const TITLE_NAME: &str = "title";
+const DATE_NAME: &str = "date";
+const PROPS_NAME: &str = "props";
+const SPECIAL_NAME: &str = "special";
+
+const IMAGE_CLASS_TRANSCRIBE: &str = "garfutils-transcribe";
+const IMAGE_CLASS_SHOW: &str = "garfutils-show";
+
+const WATERMARKS: &[&str] = &[
+    "GarfEO",
+    "@garfield.eo.v2",
+    "@garfieldeo@mastodon.world",
+    "Garfield-EO",
+    "garfeo",
+    "Garfeo",
+    "Garfield Esperanto",
+    "Garfildo Esperanta",
+    "Esperanta Garfield",
+    "garf-eo",
+];
+
+fn get_dir_config(location: Option<PathBuf>, cache_file: Option<PathBuf>) -> Result<DirConfig> {
     let Some(location) =
         location.or_else(|| dirs_next::data_dir().map(|dir| dir.join(LOCATION_NAME)))
     else {
@@ -165,27 +190,30 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     let mut temp_file_path = dir_config.temp_dir.join("transcript");
     temp_file_path.set_extension(&id);
 
+    let transcript_file_path = dir_config
+        .completed_posts_dir
+        .join(&id)
+        .join(TRANSCRIPT_NAME);
     let esperanto_file_path = dir_config
         .completed_posts_dir
         .join(&id)
-        .join("esperanto.png");
-    let english_file_path = dir_config.completed_posts_dir.join(&id).join("english.png");
-    let transcript_file_path = dir_config.completed_posts_dir.join(&id).join("transcript");
+        .join(IMAGE_ESPERANTO_NAME);
+    let english_file_path = dir_config
+        .completed_posts_dir
+        .join(&id)
+        .join(IMAGE_ENGLISH_NAME);
 
     let id_number = id
         .parse::<u32>()
         .with_context(|| "Post id is not an integer")?;
 
-    // TODO(refactor): Move to wider scope?
-    const IMAGE_VIEWER_CLASS: &str = "garfutils-transcribe";
-
-    command!["pkill", "--full", IMAGE_VIEWER_CLASS]?;
+    command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
     command![
         async "nsxiv",
         esperanto_file_path,
         english_file_path,
         "--class",
-        IMAGE_VIEWER_CLASS,
+        IMAGE_CLASS_TRANSCRIBE,
     ]?;
 
     // ******** !!! BSPWM-SPECIFIC FUNCTIONALITY !!! ********
@@ -223,7 +251,7 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     command![become "nvim", &temp_file_path]?;
 
-    command!["pkill", "--full", IMAGE_VIEWER_CLASS]?;
+    command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
 
     if file_matches_string(&temp_file_path, &transcript_template)
         .with_context(|| "Failed to compare transcript file against previous version")?
@@ -273,8 +301,8 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         Ok(())
     };
 
-    copy_post_file("title", true)?;
-    for file_name in ["transcript", "props", "special"] {
+    copy_post_file(TITLE_NAME, true)?;
+    for file_name in [TRANSCRIPT_NAME, PROPS_NAME, SPECIAL_NAME] {
         copy_post_file(file_name, false)?;
     }
 
@@ -298,12 +326,10 @@ fn print_confirmation(prompt: &str) {
     print!("{}", prompt);
     io::stdout().flush().expect("failed to flush stdout");
     stdin_read_and_discard();
-    println!();
 }
 
 fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
     const WAIT_DELAY: Duration = Duration::from_millis(500);
-
     while !path.as_ref().exists() {
         thread::sleep(WAIT_DELAY);
     }
@@ -357,11 +383,11 @@ fn post_exists(dir_config: &DirConfig, id: &str) -> bool {
 
 fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
     if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
-        let svg_file_path = path.join("esperanto.svg");
+        let svg_file_path = path.join(IMAGE_SVG_NAME);
         if svg_file_path.exists() {
             return Ok(false);
         }
-        let props_file_path = path.join("props");
+        let props_file_path = path.join(PROPS_NAME);
         if !props_file_path.exists() {
             return Ok(false);
         }
@@ -375,7 +401,7 @@ fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
     }
 
     if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
-        let svg_file_path = path.join("esperanto.svg");
+        let svg_file_path = path.join(IMAGE_SVG_NAME);
         Ok(!svg_file_path.exists())
     })? {
         return Ok(Some(id));
@@ -386,8 +412,8 @@ fn find_unrevised_post(dir_config: &DirConfig) -> Result<Option<String>> {
 
 fn find_untranscribed_post(dir_config: &DirConfig) -> Result<Option<String>> {
     if let Some(id) = find_post(&dir_config.completed_posts_dir, |path| {
-        let transcript_file_path = path.join("transcript");
-        let svg_file_path = path.join("esperanto.svg");
+        let transcript_file_path = path.join(TRANSCRIPT_NAME);
+        let svg_file_path = path.join(IMAGE_SVG_NAME);
         Ok(!transcript_file_path.exists() && svg_file_path.exists())
     })? {
         return Ok(Some(id));
@@ -469,10 +495,10 @@ fn make_post(
         .join(date.to_string() + ".png");
     let generated_dir = dir_config.generated_posts_dir.join(name);
     // TODO(refactor): Define file names as constants
-    let title_file_path = generated_dir.join("title");
-    let date_file_path = generated_dir.join("date");
-    let generated_comic_path = generated_dir.join("english.png");
-    let duplicate_comic_path = generated_dir.join("esperanto.png");
+    let title_file_path = generated_dir.join(TITLE_NAME);
+    let date_file_path = generated_dir.join(DATE_NAME);
+    let generated_comic_path = generated_dir.join(IMAGE_ENGLISH_NAME);
+    let duplicate_comic_path = generated_dir.join(IMAGE_ESPERANTO_NAME);
 
     // TODO(feat): Move icon file: Either to this crate or some location defined by dir_config
     let icon_data = include_bytes!("../../comic-format/icon.png");
@@ -522,19 +548,6 @@ fn make_post(
 }
 
 fn get_random_watermark() -> &'static str {
-    const WATERMARKS: &[&str] = &[
-        "GarfEO",
-        "@garfield.eo.v2",
-        "@garfieldeo@mastodon.world",
-        "Garfield-EO",
-        "garfeo",
-        "Garfeo",
-        "Garfield Esperanto",
-        "Garfildo Esperanta",
-        "Esperanta Garfield",
-        "garf-eo",
-    ];
-
     let index = random::with_rng(|rng| rng.gen_range(0..WATERMARKS.len()));
     return WATERMARKS[index];
 }
@@ -546,7 +559,7 @@ fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool>
     for entry in entries {
         let entry = entry.with_context(|| "Failed to read directory entry")?;
 
-        let date_file_path = entry.path().join("date");
+        let date_file_path = entry.path().join(DATE_NAME);
         if !date_file_path.exists() {
             continue;
         }
@@ -568,12 +581,10 @@ fn get_date(dir_config: &DirConfig, date: Option<NaiveDate>, recent: bool) -> Re
     if !recent {
         return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
     }
-
     assert!(
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-
     get_recent_date(&dir_config).with_context(|| "Failed to get recent date")
 }
 
@@ -622,12 +633,11 @@ where
 
 fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
     let (date, path) = match date {
-        Some(date) => (
-            date,
-            dir_config
-                .original_comics_dir
-                .join(date.to_string() + ".png"),
-        ),
+        Some(date) => {
+            let mut path = dir_config.original_comics_dir.join(date.to_string());
+            path.set_extension("png");
+            (date, path)
+        }
         None => {
             // TODO(fix): check if length == 0
             let path = get_random_directory_entry(&dir_config.original_comics_dir)
@@ -640,19 +650,20 @@ fn show_comic(dir_config: &DirConfig, date: Option<NaiveDate>) -> Result<()> {
         }
     };
 
-    println!("{:?}", path);
+    println!("{}", date);
 
     append_recent_date(dir_config, date).with_context(|| "Failed to append to cache file")?;
 
-    command!(
+    command!["pkill", "--full", IMAGE_CLASS_SHOW]?;
+    command![
         async "nsxiv",
         "--fullscreen",
         "--scale-mode",
         "f", // fit
         "--class",
-        "garfutils-show",
+        IMAGE_CLASS_SHOW,
         path,
-    )?;
+    ]?;
 
     Ok(())
 }
