@@ -435,7 +435,6 @@ fn make_post(
     let mut original_comic_path = location.source_dir().join(date.to_string());
     original_comic_path.set_extension(ORIGINAL_COMIC_FORMAT);
     let output_dir = generated_dir.join(name);
-    // TODO(refactor): Define file names as constants
     let title_file_path = output_dir.join(TITLE_NAME);
     let date_file_path = output_dir.join(DATE_NAME);
     let generated_comic_path = output_dir.join(IMAGE_ENGLISH_NAME);
