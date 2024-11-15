@@ -242,7 +242,7 @@ fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>]) -> Result<()> {
 
     // Temporary hide currently focused window
     // To avoid attaching image viewer to `tabbed` instance
-    bspc_command(&["node", &bspc_node, "-g", "hidden"])?;
+    bspc_command(&["node", bspc_node, "-g", "hidden"])?;
 
     spawn_image_viewer(paths, IMAGE_CLASS_TRANSCRIBE, false)?;
     // Wait for image viewer to completely start
@@ -250,7 +250,7 @@ fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>]) -> Result<()> {
 
     // Unhide main window
     // Move image viewer to left, resize slightly, re-focus main window
-    bspc_command(&["node", &bspc_node, "-g", "hidden"])?;
+    bspc_command(&["node", bspc_node, "-g", "hidden"])?;
     bspc_command(&["node", "-s", "west"])?;
     bspc_command(&["node", "-z", "right", "-200", "0"])?;
     bspc_command(&["node", "-f", "east"])?;
@@ -578,7 +578,7 @@ fn make_post(
     {
         bail!("There already exists an incomplete post with that date");
     }
-    if exists_post_with_date(&location.posts_dir(), date)
+    if exists_post_with_date(location.posts_dir(), date)
         .with_context(|| "Checking if post already exists")?
         && !skip_post_check
     {
@@ -734,7 +734,7 @@ fn append_recent_date(location: &Location, date: NaiveDate) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&location.recent_file())?;
+        .open(location.recent_file())?;
     writeln!(file, "{}", date)?;
     Ok(())
 }
