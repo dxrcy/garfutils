@@ -252,11 +252,10 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
         .with_context(|| "Invalid date file for post")?;
 
-    let name = get_unique_name(date);
-    make_post(&dir_config, date, &name, true).with_context(|| "Failed to make post")?;
+    make_post(&dir_config, date, id, true).with_context(|| "Failed to make post")?;
 
     let post_path = dir_config.completed_posts_dir.join(&id);
-    let generated_path = dir_config.generated_posts_dir.join(&name);
+    let generated_path = dir_config.generated_posts_dir.join(&id);
 
     let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
         let old_path = post_path.join(file_name);
