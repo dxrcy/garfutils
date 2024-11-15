@@ -1,6 +1,7 @@
 mod args;
 mod random;
 
+use std::borrow::Cow;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -153,7 +154,6 @@ fn main() -> Result<()> {
     random::init_rng();
 
     let args = args::Args::parse();
-
     let dir_config = get_dir_config(args.location, args.cache_file)?;
 
     match args.command {
@@ -170,7 +170,7 @@ fn main() -> Result<()> {
         args::Command::Revise { id } => {
             let id = get_revise_id(&dir_config, id)?;
             revise_post(&dir_config, &id).with_context(|| "Failed to revise post")?;
-            print_confirmation("Transcribe now? ");
+            print_confirmation("Transcribe now?");
             transcribe_post(&dir_config, &id).with_context(|| "Failed to transcribe post")?;
         }
 
@@ -193,22 +193,11 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     let mut temp_file_path = dir_config.temp_dir.join("transcript");
     temp_file_path.set_extension(id);
 
-    let transcript_file_path = dir_config
-        .completed_posts_dir
-        .join(id)
-        .join(TRANSCRIPT_NAME);
-    let esperanto_file_path = dir_config
-        .completed_posts_dir
-        .join(id)
-        .join(IMAGE_ESPERANTO_NAME);
-    let english_file_path = dir_config
-        .completed_posts_dir
-        .join(id)
-        .join(IMAGE_ENGLISH_NAME);
+    let completed_dir = dir_config.completed_posts_dir.join(id);
 
-    let id_number = id
-        .parse::<u32>()
-        .with_context(|| "Post id is not an integer")?;
+    let transcript_file_path = completed_dir.join(TRANSCRIPT_NAME);
+    let esperanto_file_path = completed_dir.join(IMAGE_ESPERANTO_NAME);
+    let english_file_path = completed_dir.join(IMAGE_ENGLISH_NAME);
 
     // Kill previous instance of image viewer
     command!["pkill", "--full", IMAGE_CLASS_TRANSCRIBE]?;
@@ -243,19 +232,18 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 
     let transcript_template = if transcript_file_path.exists() {
         println!("(transcript file already exists)");
-        fs::read_to_string(&transcript_file_path)
-            .with_context(|| "Failed to read existing transcript file")?
+        let contents = fs::read_to_string(&transcript_file_path)
+            .with_context(|| "Failed to read existing transcript file")?;
+        Cow::from(contents)
     } else {
-        let is_sunday = (id_number + 1) % 7 == 0;
-        if is_sunday {
+        Cow::from(if is_id_sunday(id)? {
             "---\n---\n---\n---\n---\n---"
         } else {
             "---\n---"
-        }
-        .to_string()
+        })
     };
 
-    fs::write(&temp_file_path, &transcript_template)
+    fs::write(&temp_file_path, &*transcript_template)
         .with_context(|| "Failed to write template transcript file")?;
 
     command![
@@ -273,7 +261,7 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         return Ok(());
     }
 
-    print_confirmation("Save transcript file? ");
+    print_confirmation("Save transcript file?");
 
     fs::rename(temp_file_path, &transcript_file_path)
         .with_context(|| "Failed to move temporary file to save transcript")?;
@@ -281,6 +269,14 @@ fn transcribe_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     println!("Saved transcript file.");
 
     Ok(())
+}
+
+fn is_id_sunday(id: &str) -> Result<bool> {
+    let id_number = id
+        .parse::<u32>()
+        .with_context(|| "Post id is not an integer")?;
+    let is_sunday = (id_number + 1) % 7 == 0;
+    Ok(is_sunday)
 }
 
 fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<bool> {
@@ -300,6 +296,7 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
     let post_path = dir_config.completed_posts_dir.join(id);
     let generated_path = dir_config.generated_posts_dir.join(id);
 
+    // TODO(refactor): Inline closure manually
     let copy_post_file = |file_name: &str, required: bool| -> Result<()> {
         let old_path = post_path.join(file_name);
         let new_path = generated_path.join(file_name);
@@ -319,11 +316,12 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
         copy_post_file(file_name, false)?;
     }
 
-    print_confirmation("Move old post to old directory? ");
+    print_confirmation("Move old post to old directory?");
 
     let old_post_path = dir_config.old_posts_dir.join(id);
     if old_post_path.exists() {
-        bail!("TODO: post already revised");
+        // TODO(feat): Handle post already revised
+        bail!("unimplemented: post already revised");
     }
     fs::rename(&post_path, &old_post_path)
         .with_context(|| "Failed to move post to `old` directory")?;
@@ -336,9 +334,20 @@ fn revise_post(dir_config: &DirConfig, id: &str) -> Result<()> {
 }
 
 fn print_confirmation(prompt: &str) {
-    print!("{}", prompt);
+    print!("{} ", prompt);
     io::stdout().flush().expect("failed to flush stdout");
     stdin_read_and_discard();
+}
+
+fn stdin_read_and_discard() {
+    let mut reader = BufReader::new(io::stdin());
+    let mut buf = [0];
+    loop {
+        reader.read_exact(&mut buf).expect("failed to read stdin");
+        if buf[0] == b'\n' {
+            return;
+        }
+    }
 }
 
 fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
@@ -347,17 +356,6 @@ fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
         thread::sleep(WAIT_DELAY);
     }
     Ok(())
-}
-
-fn stdin_read_and_discard() {
-    let mut reader = BufReader::new(io::stdin());
-    loop {
-        let mut buf = [0];
-        reader.read_exact(&mut buf).expect("failed to read stdin");
-        if buf[0] == b'\n' {
-            return;
-        }
-    }
 }
 
 fn get_revise_id(dir_config: &DirConfig, id: Option<String>) -> Result<String> {
