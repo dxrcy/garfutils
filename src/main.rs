@@ -29,20 +29,6 @@ const IMAGE_CLASS_SHOW: &str = "garfutils-show";
 
 const ORIGINAL_COMIC_FORMAT: &str = "png";
 
-// TODO(feat): Read watermarks from file
-const WATERMARKS: &[&str] = &[
-    "GarfEO",
-    "@garfield.eo.v2",
-    "@garfieldeo@mastodon.world",
-    "Garfield-EO",
-    "garfeo",
-    "Garfeo",
-    "Garfield Esperanto",
-    "Garfildo Esperanta",
-    "Esperanta Garfield",
-    "garf-eo",
-];
-
 // TODO(feat): Read icon from file
 const ICON_DATA: &[u8] = include_bytes!("../icon.png");
 
@@ -62,6 +48,7 @@ impl Location {
     // Not using `/tmp` to ensure same mount point as destination
     const TEMP_NAME: &str = "tmp";
     const CACHE_FILE_NAME: &str = "recent";
+    const WATERMARKS_NAME: &str = "watermarks";
 
     pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
         let base_dir = Self::get_base_dir(base_dir)?;
@@ -87,6 +74,9 @@ impl Location {
     }
     pub fn recent_file(&self) -> PathBuf {
         self.base_dir.join(Self::CACHE_FILE_NAME)
+    }
+    pub fn watermarks_file(&self) -> PathBuf {
+        self.base_dir.join(Self::WATERMARKS_NAME)
     }
 
     fn get_base_dir(base_dir: Option<PathBuf>) -> Result<PathBuf> {
@@ -114,20 +104,36 @@ impl Location {
         }
 
         let expected_sub_dirs = [
-            (self.source_dir(), Self::ORIGINAL_COMICS_NAME),
-            (self.generated_dir(), Self::GENERATED_POSTS_NAME),
-            (self.completed_dir(), Self::COMPLETED_POSTS_NAME),
-            (self.old_dir(), Self::OLD_POSTS_NAME),
+            (self.source_dir(), Self::ORIGINAL_COMICS_NAME, true),
+            (self.generated_dir(), Self::GENERATED_POSTS_NAME, true),
+            (self.completed_dir(), Self::COMPLETED_POSTS_NAME, true),
+            (self.old_dir(), Self::OLD_POSTS_NAME, true),
+            (self.watermarks_file(), Self::WATERMARKS_NAME, false),
         ];
-        for (path, name) in expected_sub_dirs {
-            if !path.exists() || !path.is_dir() {
-                bail!(
-                    "Location is missing sub-directory: `{0}`\n\
-                    in {1:?}\n\
-                    Please create the directory with sub-directories `{0}` which may be symlink.",
-                    name,
-                    self.base_dir,
-                );
+        for (path, name, is_dir) in expected_sub_dirs {
+            let correct_kind = if is_dir {
+                path.is_dir()
+            } else {
+                path.is_file()
+            };
+            if !correct_kind {
+                if is_dir {
+                    bail!(
+                        "Location is missing sub-directory: `{0}`\n\
+                        in {1:?}\n\
+                        Please create the directory with sub-directory `{0}`, which may be symlink.",
+                        name,
+                        self.base_dir,
+                    );
+                } else {
+                    bail!(
+                        "Location is missing file: `{0}`\n\
+                        in {1:?}\n\
+                        Please create the directory with file `{0}`, which may be symlink.",
+                        name,
+                        self.base_dir,
+                    );
+                }
             }
         }
 
@@ -549,7 +555,7 @@ fn make_post(
 
     let icon = image::load_from_memory(ICON_DATA).expect("load static icon as image");
 
-    let watermark = get_random_watermark();
+    let watermark = get_random_watermark(location).with_context(|| "Failed to get watermark")?;
 
     if !original_comic_path.exists() {
         bail!("Not the date of a real comic");
@@ -581,7 +587,7 @@ fn make_post(
 
     let original_comic =
         image::open(original_comic_path).with_context(|| "Failed to open comic")?;
-    let generated_comic = comic_format::convert_image(original_comic, &icon, watermark, 0.0);
+    let generated_comic = comic_format::convert_image(original_comic, &icon, &watermark, 0.0);
 
     generated_comic
         .save(&generated_comic_path)
@@ -595,8 +601,12 @@ fn make_post(
     Ok(())
 }
 
-fn get_random_watermark() -> &'static str {
-    WATERMARKS[random::with_rng(|rng| rng.gen_range(0..WATERMARKS.len()))]
+fn get_random_watermark(location: &Location) -> Result<String> {
+    let contents =
+        fs::read_to_string(location.watermarks_file()).with_context(|| "Failed to read file")?;
+    let watermarks: Vec<&str> = contents.lines().collect();
+    let index = random::with_rng(|rng| rng.gen_range(0..watermarks.len()));
+    Ok(watermarks[index].to_string())
 }
 
 /// Skips entries with missing or malformed date file
