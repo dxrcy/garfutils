@@ -36,7 +36,7 @@ pub fn show_comic(location: &Location, date: Option<NaiveDate>) -> Result<()> {
 
     println!("{}", date);
 
-    file::append_recent_date(location.recent_file(), date)
+    file::append_date(location.recent_file(), date)
         .with_context(|| "Failed to append to cache file")?;
 
     commands::kill_process_class(viewer_class::SHOW)?;
@@ -216,14 +216,6 @@ pub fn revise_post(location: &Location, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn get_random_watermark(location: &Location) -> Result<String> {
-    let contents =
-        fs::read_to_string(location.watermarks_file()).with_context(|| "Failed to read file")?;
-    let watermarks: Vec<&str> = contents.lines().collect();
-    let index = random::with_rng(|rng| rng.gen_range(0..watermarks.len()));
-    Ok(watermarks[index].to_string())
-}
-
 /// Skips entries with missing or malformed date file
 fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool> {
     let entries = fs::read_dir(dir).with_context(|| "Failed to read directory")?;
@@ -247,6 +239,14 @@ fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool>
     }
 
     Ok(false)
+}
+
+fn get_random_watermark(location: &Location) -> Result<String> {
+    let contents =
+        fs::read_to_string(location.watermarks_file()).with_context(|| "Failed to read file")?;
+    let watermarks: Vec<&str> = contents.lines().collect();
+    let index = random::with_rng(|rng| rng.gen_range(0..watermarks.len()));
+    Ok(watermarks[index].to_string())
 }
 
 fn is_id_sunday(id: &str) -> Result<bool> {

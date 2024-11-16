@@ -41,19 +41,19 @@ pub enum Command {
         recent: bool,
     },
 
-    /// Recreate an existing post, given an id
-    #[clap(alias = "r")]
-    Revise {
-        /// Id of the post to recreate
-        id: Option<String>,
-    },
-
     /// Transcribe an existing post, given an id
     ///
     /// Displays post, and opens editor to input transcription
     #[clap(alias = "t")]
     Transcribe {
         /// Id of the post to transcribe
+        id: Option<String>,
+    },
+
+    /// Recreate an existing post, given an id
+    #[clap(alias = "r")]
+    Revise {
+        /// Id of the post to recreate
         id: Option<String>,
     },
 }

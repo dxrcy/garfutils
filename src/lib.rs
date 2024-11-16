@@ -31,5 +31,5 @@ pub fn confirm(prompt: &str) {
     use std::io::{self, Write as _};
     print!("{} ", prompt);
     io::stdout().flush().expect("failed to flush stdout");
-    file::stdin_read_and_discard();
+    file::discard_read_line(&mut io::stdin());
 }

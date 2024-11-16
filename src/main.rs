@@ -3,7 +3,7 @@ mod args;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use garfutils::{actions, names, confirm, Location};
+use garfutils::{actions, confirm, names, Location};
 
 fn main() -> Result<()> {
     garfutils::init_rng();
@@ -23,16 +23,16 @@ fn main() -> Result<()> {
                 .with_context(|| "Failed to make post")?;
         }
 
-        args::Command::Revise { id } => {
-            let id = names::get_revise_id(&location, id)?;
-            actions::revise_post(&location, &id).with_context(|| "Failed to revise post")?;
-            confirm("Transcribe now?");
+        args::Command::Transcribe { id } => {
+            let id = names::get_transcribe_id(&location, id)?;
             actions::transcribe_post(&location, &id)
                 .with_context(|| "Failed to transcribe post")?;
         }
 
-        args::Command::Transcribe { id } => {
-            let id = names::get_transcribe_id(&location, id)?;
+        args::Command::Revise { id } => {
+            let id = names::get_revise_id(&location, id)?;
+            actions::revise_post(&location, &id).with_context(|| "Failed to revise post")?;
+            confirm("Transcribe now?");
             actions::transcribe_post(&location, &id)
                 .with_context(|| "Failed to transcribe post")?;
         }

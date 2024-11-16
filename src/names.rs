@@ -8,23 +8,9 @@ use std::fs;
 use anyhow::{bail, Context as _, Result};
 use chrono::{Datelike as _, NaiveDate};
 use rand::Rng as _;
-
-pub fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
-    if !recent {
-        return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
-    }
-    assert!(
-        date.is_none(),
-        "date should be `None` with `--recent` (cli parsing is broken)"
-    );
-    let recent_date = get_recent_date(location).with_context(|| "Failed to get recent date")?;
-    println!("Date: {}", recent_date);
-    Ok(recent_date)
-}
+use std::fmt::Write as _;
 
 pub fn get_unique_name(date: NaiveDate) -> String {
-    use std::fmt::Write;
-
     const CODE_LENGTH: usize = 4;
     const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-MM-DD".len();
 
@@ -43,24 +29,20 @@ pub fn get_unique_name(date: NaiveDate) -> String {
 
     // Avoid unnecessary temporary string allocation
     write!(name, ":{}", date.format("%Y-%m-%d")).expect("write to string should not fail");
-
     name
 }
 
-pub fn get_revise_id(location: &Location, id: Option<String>) -> Result<String> {
-    if let Some(id) = id {
-        if !location.posts_dir().join(&id).is_dir() {
-            bail!("No post exists with that id");
-        }
-        return Ok(id);
+pub fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
+    if !recent {
+        return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
     }
-    if let Some(id) =
-        find_unrevised_post(location).with_context(|| "Trying to find post to revise")?
-    {
-        println!("Post id: {}", id);
-        return Ok(id);
-    }
-    bail!("No posts to revise");
+    assert!(
+        date.is_none(),
+        "date should be `None` with `--recent` (cli parsing is broken)"
+    );
+    let recent_date = get_recent_date(location).with_context(|| "Failed to get recent date")?;
+    println!("Date: {}", recent_date);
+    Ok(recent_date)
 }
 
 pub fn get_transcribe_id(location: &Location, id: Option<String>) -> Result<String> {
@@ -79,6 +61,22 @@ pub fn get_transcribe_id(location: &Location, id: Option<String>) -> Result<Stri
     bail!("No posts to transcribe");
 }
 
+pub fn get_revise_id(location: &Location, id: Option<String>) -> Result<String> {
+    if let Some(id) = id {
+        if !location.posts_dir().join(&id).is_dir() {
+            bail!("No post exists with that id");
+        }
+        return Ok(id);
+    }
+    if let Some(id) =
+        find_unrevised_post(location).with_context(|| "Trying to find post to revise")?
+    {
+        println!("Post id: {}", id);
+        return Ok(id);
+    }
+    bail!("No posts to revise");
+}
+
 fn get_recent_date(location: &Location) -> Result<NaiveDate> {
     let recent_file = location.recent_file();
 
@@ -87,6 +85,20 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
     }
     let file = fs::OpenOptions::new().read(true).open(&recent_file)?;
     file::read_last_line_date(file)
+}
+
+fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
+    let completed_dir = location.posts_dir();
+
+    if let Some(id) = file::find_child(&completed_dir, |path| {
+        let transcript_file_path = path.join(post_file::TRANSCRIPT);
+        let svg_file_path = path.join(post_file::SVG);
+        Ok(!transcript_file_path.exists() && svg_file_path.exists())
+    })? {
+        return Ok(Some(id));
+    }
+
+    Ok(None)
 }
 
 fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
@@ -113,20 +125,6 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
     if let Some(id) = file::find_child(&completed_dir, |path| {
         let svg_file_path = path.join(post_file::SVG);
         Ok(!svg_file_path.exists())
-    })? {
-        return Ok(Some(id));
-    }
-
-    Ok(None)
-}
-
-fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
-    let completed_dir = location.posts_dir();
-
-    if let Some(id) = file::find_child(&completed_dir, |path| {
-        let transcript_file_path = path.join(post_file::TRANSCRIPT);
-        let svg_file_path = path.join(post_file::SVG);
-        Ok(!transcript_file_path.exists() && svg_file_path.exists())
     })? {
         return Ok(Some(id));
     }
