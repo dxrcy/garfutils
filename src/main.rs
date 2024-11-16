@@ -3,7 +3,7 @@ mod args;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use garfutils::*;
+use garfutils::{actions, names, confirm, Location};
 
 fn main() -> Result<()> {
     garfutils::init_rng();
@@ -12,25 +12,29 @@ fn main() -> Result<()> {
 
     match args.command {
         args::Command::Show { date } => {
-            show_comic(&location, date)?;
+            actions::show_comic(&location, date)?;
         }
 
         args::Command::Make { date, recent } => {
-            let date = get_date(&location, date, recent).with_context(|| "Failed to get date")?;
-            let name = get_unique_name(date);
-            make_post(&location, date, &name, false).with_context(|| "Failed to make post")?;
+            let date =
+                names::get_date(&location, date, recent).with_context(|| "Failed to get date")?;
+            let name = names::get_unique_name(date);
+            actions::make_post(&location, date, &name, false)
+                .with_context(|| "Failed to make post")?;
         }
 
         args::Command::Revise { id } => {
-            let id = get_revise_id(&location, id)?;
-            revise_post(&location, &id).with_context(|| "Failed to revise post")?;
-            print_confirmation("Transcribe now?");
-            transcribe_post(&location, &id).with_context(|| "Failed to transcribe post")?;
+            let id = names::get_revise_id(&location, id)?;
+            actions::revise_post(&location, &id).with_context(|| "Failed to revise post")?;
+            confirm("Transcribe now?");
+            actions::transcribe_post(&location, &id)
+                .with_context(|| "Failed to transcribe post")?;
         }
 
         args::Command::Transcribe { id } => {
-            let id = get_transcribe_id(&location, id)?;
-            transcribe_post(&location, &id).with_context(|| "Failed to transcribe post")?;
+            let id = names::get_transcribe_id(&location, id)?;
+            actions::transcribe_post(&location, &id)
+                .with_context(|| "Failed to transcribe post")?;
         }
     }
 
