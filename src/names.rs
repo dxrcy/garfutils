@@ -105,8 +105,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
     let completed_dir = location.posts_dir();
 
     if let Some(id) = file::find_child(&completed_dir, |path| {
-        let svg_file_path = path.join(post_file::SVG);
-        if svg_file_path.exists() {
+        if path.join(post_file::SVG).exists() {
             return Ok(false);
         }
         let props_file_path = path.join(post_file::PROPS);
@@ -117,14 +116,31 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
             .read(true)
             .open(&props_file_path)
             .with_context(|| "Failed to read props file")?;
-        file::file_contains_line(props_file, "good")
+        if !file::file_contains_line(props_file, "good")? {
+            return Ok(false);
+        }
+        Ok(false)
     })? {
         return Ok(Some(id));
     }
 
     if let Some(id) = file::find_child(&completed_dir, |path| {
-        let svg_file_path = path.join(post_file::SVG);
-        Ok(!svg_file_path.exists())
+        if path.join(post_file::SVG).exists() {
+            return Ok(false);
+        }
+        Ok(true)
+    })? {
+        return Ok(Some(id));
+    }
+
+    if let Some(id) = file::find_child(&completed_dir, |path| {
+        if !path.join(post_file::SVG).exists() {
+            return Ok(false);
+        }
+        if path.join(post_file::TRANSCRIPT).exists() {
+            return Ok(false);
+        }
+        Ok(true)
     })? {
         return Ok(Some(id));
     }
