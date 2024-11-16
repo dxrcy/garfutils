@@ -67,12 +67,8 @@ pub fn append_date(path: impl AsRef<Path>, date: NaiveDate) -> io::Result<()> {
 
 pub fn get_date_from_path(path: impl AsRef<Path>) -> Option<NaiveDate> {
     let path = path.as_ref();
-    let filename = path.file_name()?.to_string_lossy();
-    let date_string = match filename.find('.') {
-        Some(position) => filename.split_at(position).0,
-        None => &filename,
-    };
-    let date = NaiveDate::parse_from_str(date_string, "%Y-%m-%d");
+    let date_str = path.file_stem()?.to_string_lossy();
+    let date = NaiveDate::parse_from_str(&*date_str, "%Y-%m-%d");
     date.ok()
 }
 
