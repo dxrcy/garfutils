@@ -10,7 +10,7 @@ use chrono::{Datelike as _, NaiveDate};
 use rand::Rng as _;
 use std::fmt::Write as _;
 
-pub fn get_unique_name(date: NaiveDate) -> String {
+pub fn generate_name(date: NaiveDate) -> String {
     const CODE_LENGTH: usize = 4;
     const STRING_LENGTH: usize = CODE_LENGTH + ":YYYY-MM-DD".len();
 
@@ -84,7 +84,7 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
         bail!("Cache file does not yet exist");
     }
     let file = fs::OpenOptions::new().read(true).open(&recent_file)?;
-    file::read_last_line_date(file)
+    file::read_last_line_as_date(file)
 }
 
 fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {

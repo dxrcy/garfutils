@@ -12,29 +12,26 @@ fn main() -> Result<()> {
 
     match args.command {
         args::Command::Show { date } => {
-            actions::show_comic(&location, date)?;
+            actions::show(&location, date)?;
         }
 
         args::Command::Make { date, recent } => {
             let date =
                 names::get_date(&location, date, recent).with_context(|| "Failed to get date")?;
-            let name = names::get_unique_name(date);
-            actions::make_post(&location, date, &name, false)
-                .with_context(|| "Failed to make post")?;
+            let name = names::generate_name(date);
+            actions::make(&location, date, &name, false).with_context(|| "Failed to make post")?;
         }
 
         args::Command::Transcribe { id } => {
             let id = names::get_transcribe_id(&location, id)?;
-            actions::transcribe_post(&location, &id)
-                .with_context(|| "Failed to transcribe post")?;
+            actions::transcribe(&location, &id).with_context(|| "Failed to transcribe post")?;
         }
 
         args::Command::Revise { id } => {
             let id = names::get_revise_id(&location, id)?;
-            actions::revise_post(&location, &id).with_context(|| "Failed to revise post")?;
+            actions::revise(&location, &id).with_context(|| "Failed to revise post")?;
             confirm("Transcribe now?");
-            actions::transcribe_post(&location, &id)
-                .with_context(|| "Failed to transcribe post")?;
+            actions::transcribe(&location, &id).with_context(|| "Failed to transcribe post")?;
         }
     }
 

@@ -13,7 +13,7 @@ use anyhow::{bail, Context as _, Result};
 use chrono::NaiveDate;
 use rand::Rng as _;
 
-pub fn show_comic(location: &Location, date: Option<NaiveDate>) -> Result<()> {
+pub fn show(location: &Location, date: Option<NaiveDate>) -> Result<()> {
     let source_dir = location.source_dir();
 
     let (date, path) = match date {
@@ -45,12 +45,7 @@ pub fn show_comic(location: &Location, date: Option<NaiveDate>) -> Result<()> {
     Ok(())
 }
 
-pub fn make_post(
-    location: &Location,
-    date: NaiveDate,
-    name: &str,
-    skip_post_check: bool,
-) -> Result<()> {
+pub fn make(location: &Location, date: NaiveDate, name: &str, skip_post_check: bool) -> Result<()> {
     let generated_dir = location.generated_dir();
 
     let mut original_comic_path = location.source_dir().join(date.to_string());
@@ -104,7 +99,7 @@ pub fn make_post(
     Ok(())
 }
 
-pub fn transcribe_post(location: &Location, id: &str) -> Result<()> {
+pub fn transcribe(location: &Location, id: &str) -> Result<()> {
     let temp_dir = location.temp_dir();
     if !temp_dir.exists() {
         fs::create_dir_all(&temp_dir)
@@ -165,7 +160,7 @@ pub fn transcribe_post(location: &Location, id: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn revise_post(location: &Location, id: &str) -> Result<()> {
+pub fn revise(location: &Location, id: &str) -> Result<()> {
     let completed_dir = location.posts_dir();
 
     let date_file_path = completed_dir.join(id).join("date");
@@ -173,7 +168,7 @@ pub fn revise_post(location: &Location, id: &str) -> Result<()> {
     let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
         .with_context(|| "Invalid date file for post")?;
 
-    make_post(location, date, id, true).with_context(|| "Failed to make post")?;
+    make(location, date, id, true).with_context(|| "Failed to make post")?;
 
     let post_path = completed_dir.join(id);
     let generated_path = location.generated_dir().join(id);

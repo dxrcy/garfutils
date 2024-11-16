@@ -72,7 +72,7 @@ pub fn get_date_from_path(path: impl AsRef<Path>) -> Option<NaiveDate> {
     date.ok()
 }
 
-pub fn read_last_line_date(file: File) -> Result<NaiveDate> {
+pub fn read_last_line_as_date(file: File) -> Result<NaiveDate> {
     let mut reader = BufReader::new(file);
     let mut date: Option<NaiveDate> = None;
 

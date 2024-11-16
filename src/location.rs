@@ -17,13 +17,6 @@ impl Location {
     const WATERMARKS_FILE: &str = "watermarks";
     const ICON_FILE: &str = "icon.png";
 
-    pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
-        let base_dir = Self::get_base_dir(base_dir)?;
-        let location = Self { base_dir };
-        location.check_dirs_exist()?;
-        Ok(location)
-    }
-
     pub fn source_dir(&self) -> PathBuf {
         self.base_dir.join(Self::SOURCE_DIR)
     }
@@ -47,6 +40,13 @@ impl Location {
     }
     pub fn icon_file(&self) -> PathBuf {
         self.base_dir.join(Self::ICON_FILE)
+    }
+
+    pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
+        let base_dir = Self::get_base_dir(base_dir)?;
+        let location = Self { base_dir };
+        location.check_dirs_exist()?;
+        Ok(location)
     }
 
     fn get_base_dir(base_dir: Option<PathBuf>) -> Result<PathBuf> {
