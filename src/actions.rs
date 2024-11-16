@@ -211,11 +211,10 @@ pub fn revise(location: &Location, id: &str) -> Result<()> {
 
 /// Skips entries with missing or malformed date file
 fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool> {
-    let entries =
-        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
+    let entries = file::read_dir(&dir)?;
 
     for entry in entries {
-        let entry = entry.with_context(|| "Reading directory entry")?;
+        let entry = entry?;
 
         let date_file_path = entry.path().join(post_file::DATE);
         if !date_file_path.exists() {

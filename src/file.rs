@@ -23,40 +23,40 @@ pub fn discard_read_line(reader: &mut impl Read) {
     }
 }
 
-pub fn get_random_directory_entry(directory: impl AsRef<Path>) -> Result<Option<DirEntry>> {
-    let count =
-        count_directory_entries(&directory).with_context(|| "Counting directory entries")?;
+pub fn get_random_directory_entry(dir: impl AsRef<Path>) -> Result<Option<DirEntry>> {
+    let count = count_dir_entries(&dir).with_context(|| "Counting directory entries")?;
     if count == 0 {
         return Ok(None);
     }
     let index = random::with_rng(|rng| rng.gen_range(0..count));
-    let entry = get_nth_directory_entry(&directory, index)?
+    let entry = get_nth_dir_entry(&dir, index)?
         .expect("generated index should be in range of directory entry count");
     Ok(Some(entry))
 }
 
-fn get_nth_directory_entry(
-    directory: impl AsRef<Path>,
-    index: usize,
-) -> io::Result<Option<DirEntry>> {
-    let mut entries = fs::read_dir(directory)?;
-    let Some(entry) = entries.nth(index) else {
+fn get_nth_dir_entry(dir: impl AsRef<Path>, index: usize) -> Result<Option<DirEntry>> {
+    let Some(entry) = read_dir(dir)?.nth(index) else {
         return Ok(None);
     };
     let entry = entry?;
     Ok(Some(entry))
 }
 
-fn count_directory_entries(dir: impl AsRef<Path>) -> Result<usize> {
-    // TODO(refactor): Create wrapper function for `read_dir`
-    let entries =
-        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
+fn count_dir_entries(dir: impl AsRef<Path>) -> Result<usize> {
     let mut count = 0;
-    for entry in entries {
+    for entry in read_dir(&dir)? {
         entry?;
         count += 1;
     }
     Ok(count)
+}
+
+/// Wrapper for `fs::read_dir` which provides context for some errors
+pub fn read_dir(dir: impl AsRef<Path>) -> Result<impl Iterator<Item = Result<DirEntry>>> {
+    let entries =
+        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
+    let entries = entries.map(|entry| entry.with_context(|| "Reading directory entry"));
+    Ok(entries)
 }
 
 pub fn append_date(path: impl AsRef<Path>, date: NaiveDate) -> io::Result<()> {
@@ -101,11 +101,8 @@ pub fn find_child<F>(dir: impl AsRef<Path>, predicate: F) -> Result<Option<Strin
 where
     F: Fn(&Path) -> Result<bool>,
 {
-    let entries =
-        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
-
-    for entry in entries {
-        let entry = entry.with_context(|| "Reading directory entry")?;
+    for entry in read_dir(&dir)? {
+        let entry = entry?;
         let path = entry.path();
 
         if !predicate(&path)? {
