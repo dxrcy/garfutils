@@ -79,7 +79,7 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
     let recent_file = location.recent_file();
 
     if !recent_file.exists() {
-        bail!("Cache file does not yet exist");
+        bail!("Recent dates file does not yet exist");
     }
     let file = fs::OpenOptions::new().read(true).open(&recent_file)?;
     file::read_last_line_as_date(file)
@@ -106,6 +106,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         if path.join(post_file::SVG).exists() {
             return Ok(false);
         }
+        const TARGET_LINE: &str = "good";
         let props_file_path = path.join(post_file::PROPS);
         if !props_file_path.exists() {
             return Ok(false);
@@ -113,8 +114,8 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         let props_file = fs::OpenOptions::new()
             .read(true)
             .open(&props_file_path)
-            .with_context(|| "Reading `props` file")?; // TODO: Use constant for file name
-        if !file::file_contains_line(props_file, "good")? {
+            .with_context(|| format!("Reading `{}` file", post_file::PROPS))?;
+        if !file::file_contains_line(props_file, TARGET_LINE)? {
             return Ok(false);
         }
         Ok(false)

@@ -85,13 +85,13 @@ pub fn read_last_line_as_date(file: File) -> Result<NaiveDate> {
         if bytes_read == 0 {
             match date {
                 Some(date) => return Ok(date),
-                None => bail!("Cache file is empty"),
+                None => bail!("Recent dates file is empty"),
             }
         }
         if !new_line.trim().is_empty() {
             match NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d") {
                 Ok(new_date) => date = Some(new_date),
-                Err(error) => bail!("Cache file contains invalid date: {}", error),
+                Err(error) => bail!("Recent dates file contains invalid date: {}", error),
             }
         }
     }
@@ -111,6 +111,7 @@ where
 
         let file_name = path
             .file_name()
+            // TODO(feat): Handle these sort of errors CONSISTENTLY
             .with_context(|| "Invalid file name")?
             .to_string_lossy()
             .to_string();

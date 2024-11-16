@@ -37,7 +37,7 @@ pub fn show(location: &Location, date: Option<NaiveDate>) -> Result<()> {
     println!("{}", date);
 
     file::append_date(location.recent_file(), date)
-        .with_context(|| "Appending date to cache file")?;
+        .with_context(|| "Appending date to recent dates file")?;
 
     commands::kill_process_class(viewer_class::SHOW)?;
     commands::spawn_image_viewer(&[path], viewer_class::SHOW, true)?;
