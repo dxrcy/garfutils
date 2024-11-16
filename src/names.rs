@@ -3,12 +3,12 @@ use crate::file;
 use crate::location::Location;
 use crate::random;
 
+use std::fmt::Write as _;
 use std::fs;
 
 use anyhow::{bail, Context as _, Result};
 use chrono::{Datelike as _, NaiveDate};
 use rand::Rng as _;
-use std::fmt::Write as _;
 
 pub fn generate_name(date: NaiveDate) -> String {
     const CODE_LENGTH: usize = 4;

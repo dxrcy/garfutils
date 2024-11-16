@@ -1,9 +1,10 @@
 use std::ffi::OsStr;
+use std::fmt::Write as _;
 use std::process::{self, Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 pub fn spawn_image_viewer(
     paths: &[impl AsRef<OsStr>],
@@ -32,17 +33,21 @@ pub fn kill_process_class(class: &str) -> Result<()> {
         .arg(class)
         .status()
         .with_context(|| "Killing image viewer")?;
+    // Non-zero exit means no process found; not necessarily an error
     Ok(())
 }
 
 pub fn open_editor(path: impl AsRef<OsStr>) -> Result<()> {
-    Command::new("nvim")
+    let status = Command::new("nvim")
         .arg(path)
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
         .with_context(|| "Opening editor")?;
+    if !status.success() {
+        bail!("Editor did not exit successfully");
+    }
     Ok(())
 }
 
@@ -73,12 +78,26 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], viewer_class: &str
 }
 
 fn bspc_command(args: &[impl AsRef<OsStr>]) -> Result<process::Output> {
-    let output = Command::new("bspc").args(args).output().with_context(|| {
-        format!(
-            "Run `bspc` command {:?}",
-            // TODO(refactor): Extract this line to a function
-            args.into_iter().map(|x| x.as_ref()).collect::<Vec<_>>()
-        )
-    })?;
+    let output = Command::new("bspc")
+        .args(args)
+        .output()
+        .with_context(|| format!("Run command `bspc {}`", stringify_args(args)))?;
+    if !output.status.success() {
+        bail!(
+            "Command did not exit successfully: `bspc {}`",
+            stringify_args(args)
+        );
+    }
     Ok(output)
+}
+
+fn stringify_args(args: &[impl AsRef<OsStr>]) -> String {
+    let mut output = String::new();
+    for arg in args {
+        if !output.is_empty() {
+            output += " ";
+        }
+        write!(output, "{:?}", arg.as_ref()).expect("write to string should not fail");
+    }
+    output
 }
