@@ -40,7 +40,7 @@ pub fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> R
         date.is_none(),
         "date should be `None` with `--recent` (cli parsing is broken)"
     );
-    let recent_date = get_recent_date(location).with_context(|| "Failed to get recent date")?;
+    let recent_date = get_recent_date(location).with_context(|| "Parsing recent date")?;
     println!("Date: {}", recent_date);
     Ok(recent_date)
 }
@@ -53,7 +53,7 @@ pub fn get_transcribe_id(location: &Location, id: Option<String>) -> Result<Stri
         return Ok(id);
     }
     if let Some(id) =
-        find_untranscribed_post(location).with_context(|| "Trying to find post to transcribe")?
+        find_untranscribed_post(location).with_context(|| "Finding post to transcribe")?
     {
         println!("Post id: {}", id);
         return Ok(id);
@@ -68,9 +68,7 @@ pub fn get_revise_id(location: &Location, id: Option<String>) -> Result<String> 
         }
         return Ok(id);
     }
-    if let Some(id) =
-        find_unrevised_post(location).with_context(|| "Trying to find post to revise")?
-    {
+    if let Some(id) = find_unrevised_post(location).with_context(|| "Finding post to revise")? {
         println!("Post id: {}", id);
         return Ok(id);
     }
@@ -115,7 +113,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         let props_file = fs::OpenOptions::new()
             .read(true)
             .open(&props_file_path)
-            .with_context(|| "Failed to read props file")?;
+            .with_context(|| "Reading `props` file")?; // TODO: Use constant for file name
         if !file::file_contains_line(props_file, "good")? {
             return Ok(false);
         }

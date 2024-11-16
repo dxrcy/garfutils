@@ -22,7 +22,7 @@ pub fn spawn_image_viewer(
     command
         .args(paths)
         .spawn()
-        .with_context(|| "Failed to spawn image viewer")?;
+        .with_context(|| "Spawning image viewer")?;
     Ok(())
 }
 
@@ -31,7 +31,7 @@ pub fn kill_process_class(class: &str) -> Result<()> {
         .arg("--full")
         .arg(class)
         .status()
-        .with_context(|| "Failed to kill image viewer")?;
+        .with_context(|| "Killing image viewer")?;
     Ok(())
 }
 
@@ -42,7 +42,7 @@ pub fn open_editor(path: impl AsRef<OsStr>) -> Result<()> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .with_context(|| "Failed to open editor")?;
+        .with_context(|| "Opening editor")?;
     Ok(())
 }
 
@@ -73,9 +73,12 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], viewer_class: &str
 }
 
 fn bspc_command(args: &[impl AsRef<OsStr>]) -> Result<process::Output> {
-    let output = Command::new("bspc")
-        .args(args)
-        .output()
-        .with_context(|| "Failed to run bspc command")?;
+    let output = Command::new("bspc").args(args).output().with_context(|| {
+        format!(
+            "Run `bspc` command {:?}",
+            // TODO(refactor): Extract this line to a function
+            args.into_iter().map(|x| x.as_ref()).collect::<Vec<_>>()
+        )
+    })?;
     Ok(output)
 }

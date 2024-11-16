@@ -23,8 +23,9 @@ pub fn discard_read_line(reader: &mut impl Read) {
     }
 }
 
-pub fn get_random_directory_entry(directory: impl AsRef<Path>) -> io::Result<Option<DirEntry>> {
-    let count = count_directory_entries(&directory)?;
+pub fn get_random_directory_entry(directory: impl AsRef<Path>) -> Result<Option<DirEntry>> {
+    let count =
+        count_directory_entries(&directory).with_context(|| "Counting directory entries")?;
     if count == 0 {
         return Ok(None);
     }
@@ -46,8 +47,10 @@ fn get_nth_directory_entry(
     Ok(Some(entry))
 }
 
-fn count_directory_entries(directory: impl AsRef<Path>) -> io::Result<usize> {
-    let entries = fs::read_dir(directory)?;
+fn count_directory_entries(dir: impl AsRef<Path>) -> Result<usize> {
+    // TODO(refactor): Create wrapper function for `read_dir`
+    let entries =
+        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
     let mut count = 0;
     for entry in entries {
         entry?;
@@ -94,15 +97,15 @@ pub fn read_last_line_as_date(file: File) -> Result<NaiveDate> {
     }
 }
 
-pub fn find_child<F>(directory: impl AsRef<Path>, predicate: F) -> Result<Option<String>>
+pub fn find_child<F>(dir: impl AsRef<Path>, predicate: F) -> Result<Option<String>>
 where
     F: Fn(&Path) -> Result<bool>,
 {
     let entries =
-        fs::read_dir(directory).with_context(|| "Failed to read completed posts directory")?;
+        fs::read_dir(&dir).with_context(|| format!("Reading directory {:?}", dir.as_ref()))?;
 
     for entry in entries {
-        let entry = entry.with_context(|| "Failed to read entry")?;
+        let entry = entry.with_context(|| "Reading directory entry")?;
         let path = entry.path();
 
         if !predicate(&path)? {

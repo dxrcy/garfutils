@@ -57,7 +57,7 @@ impl Location {
             return Ok(path.join(Self::DEFAULT_LOCATION_NAME));
         }
         bail!(
-            "Failed to read standard data location.\n\
+            "Reading standard data location.\n\
             For *nix systems, try setting `$XDG_DATA_HOME` or `$HOME` environment variables.\n\
             Alternatively, run this program with the `--location <LOCATION>` option."
         );
