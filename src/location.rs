@@ -116,7 +116,7 @@ impl Location {
                     \t├─ {}\n\
                     \t└─ {}\n\
                 \n\
-                If the `--location` option wasn't provided, the default location `$XDG_DATA_HOME/garfutils` will be used.
+                If the `--location` option wasn't provided, the default location `$XDG_DATA_HOME/{}` will be used.
             ",
             self.base_dir.to_string_lossy(),
             Self::SOURCE_DIR,
@@ -124,6 +124,7 @@ impl Location {
             Self::POSTS_DIR,
             Self::WATERMARKS_FILE,
             Self::ICON_FILE,
+            Self::DEFAULT_LOCATION_NAME,
         )
     }
 }
