@@ -65,7 +65,8 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], viewer_class: &str
 
     spawn_image_viewer(paths, viewer_class, false)?;
     // Wait for image viewer to completely start
-    thread::sleep(Duration::from_millis(50));
+    // TODO(fix): Spin until image viewer window has spawned
+    thread::sleep(Duration::from_millis(100));
 
     // Unhide main window
     // Move image viewer to left, resize slightly, re-focus main window
