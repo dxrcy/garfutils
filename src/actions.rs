@@ -27,7 +27,9 @@ pub fn show(location: &Location, date: Option<NaiveDate>) -> Result<()> {
                 .with_context(|| "Reading source directory")?
                 .with_context(|| "No comics found")?
                 .path();
-            let date = file::get_date_from_path(&path).with_context(|| {
+            let date_opt =
+                file::get_date_from_path(&path).with_context(|| "Parsing date from path")?;
+            let date = date_opt.with_context(|| {
                 "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
             })?;
             (date, path)

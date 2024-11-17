@@ -69,11 +69,14 @@ pub fn append_date(path: impl AsRef<Path>, date: NaiveDate) -> io::Result<()> {
     Ok(())
 }
 
-pub fn get_date_from_path(path: impl AsRef<Path>) -> Option<NaiveDate> {
+pub fn get_date_from_path(path: impl AsRef<Path>) -> Result<Option<NaiveDate>> {
     let path = path.as_ref();
-    let date_str = path.file_stem()?.to_string_lossy();
+    let date_str = path
+        .file_stem()
+        .with_context(|| "Invalid file name")?
+        .to_string_lossy();
     let date = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d");
-    date.ok()
+    Ok(date.ok())
 }
 
 pub fn read_last_line_as_date(file: File) -> Result<NaiveDate> {
@@ -112,7 +115,6 @@ where
 
         let file_name = path
             .file_name()
-            // TODO(feat): Handle these sort of errors CONSISTENTLY
             .with_context(|| "Invalid file name")?
             .to_string_lossy()
             .to_string();
