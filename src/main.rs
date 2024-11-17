@@ -12,6 +12,7 @@ fn main() -> Result<()> {
 
     match args.command {
         args::Command::Show { date } => {
+            // TODO(feat): Add error contexts
             actions::show(&location, date)?;
         }
 
@@ -28,6 +29,9 @@ fn main() -> Result<()> {
 
         args::Command::Revise { id } => {
             let id = names::get_revise_id(&location, id)?;
+            let date = names::read_date(&location, &id)
+                .with_context(|| "Reading date from existing post directory")?;
+            actions::make(&location, date, &id, true).with_context(|| "Generating post")?;
             actions::revise(&location, &id).with_context(|| "Revising post")?;
             confirm("Transcribe now?");
             actions::transcribe(&location, &id).with_context(|| "Transcribing post")?;

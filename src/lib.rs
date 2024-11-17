@@ -1,7 +1,9 @@
 pub mod actions;
+// TODO(refactor): Rename module `names`
 pub mod names;
 
 mod commands;
+// TODO(refactor): Rename module `file`
 mod file;
 mod location;
 mod random;

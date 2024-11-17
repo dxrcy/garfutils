@@ -75,6 +75,14 @@ pub fn get_revise_id(location: &Location, id: Option<String>) -> Result<String> 
     bail!("No posts to revise");
 }
 
+pub fn read_date(location: &Location, id: &str) -> Result<NaiveDate> {
+    let date_file_path = location.posts_dir().join(id).join("date");
+    let date_file = fs::read_to_string(date_file_path)?;
+    let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
+        .with_context(|| "Invalid date file for post")?;
+    Ok(date)
+}
+
 fn get_recent_date(location: &Location) -> Result<NaiveDate> {
     let recent_file = location.recent_file();
 

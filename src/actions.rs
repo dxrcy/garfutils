@@ -108,6 +108,7 @@ pub fn transcribe(location: &Location, id: &str) -> Result<()> {
     let mut temp_file_path = temp_dir.join("transcript");
     temp_file_path.set_extension(id);
 
+    // TODO(refactor): Rename to `posts_dir`
     let completed_dir = location.posts_dir().join(id);
 
     let transcript_file_path = completed_dir.join(post_file::TRANSCRIPT);
@@ -159,17 +160,7 @@ pub fn transcribe(location: &Location, id: &str) -> Result<()> {
 }
 
 pub fn revise(location: &Location, id: &str) -> Result<()> {
-    let completed_dir = location.posts_dir();
-
-    let date_file_path = completed_dir.join(id).join("date");
-    let date_file = fs::read_to_string(date_file_path)?;
-    let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
-        .with_context(|| "Invalid date file for post")?;
-
-    // TODO(refactor): Move to `main.rs`
-    make(location, date, id, true).with_context(|| "Generating post")?;
-
-    let post_path = completed_dir.join(id);
+    let post_path = location.posts_dir().join(id);
     let generated_path = location.generated_dir().join(id);
 
     let copy_files = [
