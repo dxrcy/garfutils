@@ -94,9 +94,9 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
 }
 
 fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
-    let completed_dir = location.posts_dir();
+    let posts_dir = location.posts_dir();
 
-    if let Some(id) = file::find_child(&completed_dir, |path| {
+    if let Some(id) = file::find_child(&posts_dir, |path| {
         let transcript_file_path = path.join(post_file::TRANSCRIPT);
         let svg_file_path = path.join(post_file::SVG);
         Ok(!transcript_file_path.exists() && svg_file_path.exists())
@@ -108,9 +108,11 @@ fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
 }
 
 fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
-    let completed_dir = location.posts_dir();
+    let posts_dir = location.posts_dir();
 
-    if let Some(id) = file::find_child(&completed_dir, |path| {
+    // TODO(refactor): This code is ugly. Please fix.
+
+    if let Some(id) = file::find_child(&posts_dir, |path| {
         if path.join(post_file::SVG).exists() {
             return Ok(false);
         }
@@ -133,7 +135,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         return Ok(Some(id));
     }
 
-    if let Some(id) = file::find_child(&completed_dir, |path| {
+    if let Some(id) = file::find_child(&posts_dir, |path| {
         if path.join(post_file::SVG).exists() {
             return Ok(false);
         }
@@ -142,7 +144,7 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         return Ok(Some(id));
     }
 
-    if let Some(id) = file::find_child(&completed_dir, |path| {
+    if let Some(id) = file::find_child(&posts_dir, |path| {
         if !path.join(post_file::SVG).exists() {
             return Ok(false);
         }

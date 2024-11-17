@@ -15,7 +15,7 @@ pub struct Args {
     ///
     /// Default: `$XDG_DATA_HOME/garfutils` or `$HOME/.local/share/garfutils`
     ///
-    /// Expects sub-directories `comics`, `generated`, `completed`, each of which may be symlinks
+    /// Expects sub-directories `source`, `generated`, `posts`, each of which may be symlinks
     #[arg(long)]
     pub location: Option<PathBuf>,
 }

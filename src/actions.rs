@@ -69,7 +69,7 @@ pub fn make(location: &Location, date: NaiveDate, name: &str, skip_post_check: b
     if exists_post_with_date(&generated_dir, date)
         .with_context(|| "Checking if post already generated")?
     {
-        bail!("There already exists an incomplete post with that date");
+        bail!("There already exists a generated post with that date");
     }
     if exists_post_with_date(location.posts_dir(), date)
         .with_context(|| "Checking if post already exists")?
@@ -110,12 +110,11 @@ pub fn transcribe(location: &Location, id: &str) -> Result<()> {
     let mut temp_file_path = temp_dir.join("transcript");
     temp_file_path.set_extension(id);
 
-    // TODO(refactor): Rename to `posts_dir`
-    let completed_dir = location.posts_dir().join(id);
+    let posts_dir = location.posts_dir().join(id);
 
-    let transcript_file_path = completed_dir.join(post_file::TRANSCRIPT);
-    let initial_file_path = completed_dir.join(post_file::INITIAL);
-    let duplicate_file_path = completed_dir.join(post_file::DUPLICATE);
+    let transcript_file_path = posts_dir.join(post_file::TRANSCRIPT);
+    let initial_file_path = posts_dir.join(post_file::INITIAL);
+    let duplicate_file_path = posts_dir.join(post_file::DUPLICATE);
 
     commands::kill_process_class(viewer_class::TRANSCRIBE)?;
 
