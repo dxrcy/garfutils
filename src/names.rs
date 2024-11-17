@@ -5,6 +5,7 @@ use crate::random;
 
 use std::fmt::Write as _;
 use std::fs;
+use std::path::Path;
 
 use anyhow::{bail, Context as _, Result};
 use chrono::{Datelike as _, NaiveDate};
@@ -94,67 +95,60 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
 }
 
 fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
-    let posts_dir = location.posts_dir();
-
-    if let Some(id) = file::find_child(&posts_dir, |path| {
-        let transcript_file_path = path.join(post_file::TRANSCRIPT);
-        let svg_file_path = path.join(post_file::SVG);
-        Ok(!transcript_file_path.exists() && svg_file_path.exists())
-    })? {
-        return Ok(Some(id));
-    }
-
-    Ok(None)
+    find_post(
+        location,
+        [|path: &Path| Ok(has_svg_file(path) && !has_transcript_file(path))],
+    )
 }
 
 fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
+    find_post(
+        location,
+        [
+            |path: &Path| Ok(!has_svg_file(path) && is_post_good(path)?),
+            |path: &Path| Ok(!has_svg_file(path)),
+        ],
+    )
+}
+
+fn has_svg_file(path: impl AsRef<Path>) -> bool {
+    path.as_ref().join(post_file::SVG).exists()
+}
+fn has_transcript_file(path: impl AsRef<Path>) -> bool {
+    path.as_ref().join(post_file::TRANSCRIPT).exists()
+}
+
+/// Returns `Ok(true)` if post has a `props` file, which contains the line `good`
+fn is_post_good(path: impl AsRef<Path>) -> Result<bool> {
+    const TARGET_LINE: &str = "good";
+
+    let props_file_path = path.as_ref().join(post_file::PROPS);
+    if !props_file_path.exists() {
+        return Ok(false);
+    }
+
+    let props_file = fs::OpenOptions::new()
+        .read(true)
+        .open(&props_file_path)
+        .with_context(|| format!("Opening `{}` file", post_file::PROPS))?;
+
+    let has_target_line = file::file_contains_line(props_file, TARGET_LINE)
+        .with_context(|| format!("Reading `{}` file", post_file::PROPS))?;
+
+    Ok(has_target_line)
+}
+
+/// Loop through 'criteria' functions, until one finds an appropriate post
+fn find_post<I, F>(location: &Location, criteria: I) -> Result<Option<String>>
+where
+    I: IntoIterator<Item = F>,
+    F: Fn(&Path) -> Result<bool>,
+{
     let posts_dir = location.posts_dir();
-
-    // TODO(refactor): This code is ugly. Please fix.
-
-    if let Some(id) = file::find_child(&posts_dir, |path| {
-        if path.join(post_file::SVG).exists() {
-            return Ok(false);
+    for criterion in criteria {
+        if let Some(id) = file::find_child(&posts_dir, criterion)? {
+            return Ok(Some(id));
         }
-        const TARGET_LINE: &str = "good";
-        let props_file_path = path.join(post_file::PROPS);
-        if !props_file_path.exists() {
-            return Ok(false);
-        }
-        let props_file = fs::OpenOptions::new()
-            .read(true)
-            .open(&props_file_path)
-            .with_context(|| format!("Opening `{}` file", post_file::PROPS))?;
-        let has_target_line = file::file_contains_line(props_file, TARGET_LINE)
-            .with_context(|| format!("Reading `{}` file", post_file::PROPS))?;
-        if !has_target_line {
-            return Ok(false);
-        }
-        Ok(false)
-    })? {
-        return Ok(Some(id));
     }
-
-    if let Some(id) = file::find_child(&posts_dir, |path| {
-        if path.join(post_file::SVG).exists() {
-            return Ok(false);
-        }
-        Ok(true)
-    })? {
-        return Ok(Some(id));
-    }
-
-    if let Some(id) = file::find_child(&posts_dir, |path| {
-        if !path.join(post_file::SVG).exists() {
-            return Ok(false);
-        }
-        if path.join(post_file::TRANSCRIPT).exists() {
-            return Ok(false);
-        }
-        Ok(true)
-    })? {
-        return Ok(Some(id));
-    }
-
     Ok(None)
 }
