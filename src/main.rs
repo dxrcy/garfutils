@@ -12,8 +12,7 @@ fn main() -> Result<()> {
 
     match args.command {
         args::Command::Show { date } => {
-            // TODO(feat): Add error contexts
-            actions::show(&location, date)?;
+            actions::show(&location, date).with_context(|| "Showing comic")?;
         }
 
         args::Command::Make { date, recent } => {
@@ -23,12 +22,12 @@ fn main() -> Result<()> {
         }
 
         args::Command::Transcribe { id } => {
-            let id = names::get_transcribe_id(&location, id)?;
+            let id = names::get_transcribe_id(&location, id).with_context(|| "Parsing post id")?;
             actions::transcribe(&location, &id).with_context(|| "Transcribing post")?;
         }
 
         args::Command::Revise { id } => {
-            let id = names::get_revise_id(&location, id)?;
+            let id = names::get_revise_id(&location, id).with_context(|| "Parsing post id")?;
             let date = names::read_date(&location, &id)
                 .with_context(|| "Reading date from existing post directory")?;
             actions::make(&location, date, &id, true).with_context(|| "Generating post")?;

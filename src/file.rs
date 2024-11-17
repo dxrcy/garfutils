@@ -30,12 +30,13 @@ pub fn get_random_directory_entry(dir: impl AsRef<Path>) -> Result<Option<DirEnt
     }
     let index = random::with_rng(|rng| rng.gen_range(0..count));
     let entry = get_nth_dir_entry(&dir, index)?
-        .expect("generated index should be in range of directory entry count");
+        .expect("generated index should refer to a valid directory entry");
     Ok(Some(entry))
 }
 
 fn get_nth_dir_entry(dir: impl AsRef<Path>, index: usize) -> Result<Option<DirEntry>> {
-    let Some(entry) = read_dir(dir)?.nth(index) else {
+    let mut entries = read_dir(dir)?;
+    let Some(entry) = entries.nth(index) else {
         return Ok(None);
     };
     let entry = entry?;
@@ -85,13 +86,13 @@ pub fn read_last_line_as_date(file: File) -> Result<NaiveDate> {
         if bytes_read == 0 {
             match date {
                 Some(date) => return Ok(date),
-                None => bail!("Recent dates file is empty"),
+                None => bail!("File is empty"),
             }
         }
         if !new_line.trim().is_empty() {
             match NaiveDate::parse_from_str(new_line.trim(), "%Y-%m-%d") {
                 Ok(new_date) => date = Some(new_date),
-                Err(error) => bail!("Recent dates file contains invalid date: {}", error),
+                Err(error) => bail!("File contains invalid date: {}", error),
             }
         }
     }
@@ -127,20 +128,20 @@ pub fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Res
     Ok(file_contents == target)
 }
 
-pub fn file_contains_line(file: File, needle: &str) -> Result<bool> {
+pub fn file_contains_line(file: File, needle: &str) -> io::Result<bool> {
     let reader = io::BufReader::new(file);
     for line in reader.lines() {
-        if line?.trim() == needle {
+        let line = line?;
+        if line.trim() == needle {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-pub fn wait_for_file(path: impl AsRef<Path>) -> Result<()> {
+pub fn wait_for_file(path: impl AsRef<Path>) {
     const WAIT_DELAY: Duration = Duration::from_millis(500);
     while !path.as_ref().exists() {
         thread::sleep(WAIT_DELAY);
     }
-    Ok(())
 }

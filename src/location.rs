@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 pub struct Location {
     base_dir: PathBuf,
@@ -45,7 +45,9 @@ impl Location {
     pub fn from(base_dir: Option<PathBuf>) -> Result<Self> {
         let base_dir = Self::get_base_dir(base_dir)?;
         let location = Self { base_dir };
-        location.check_dirs_exist()?;
+        location
+            .check_dirs_exist()
+            .with_context(|| "Checking directory structure is valid")?;
         Ok(location)
     }
 

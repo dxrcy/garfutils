@@ -90,7 +90,7 @@ fn get_recent_date(location: &Location) -> Result<NaiveDate> {
         bail!("Recent dates file does not yet exist");
     }
     let file = fs::OpenOptions::new().read(true).open(&recent_file)?;
-    file::read_last_line_as_date(file)
+    file::read_last_line_as_date(file).with_context(|| "Reading recent date file")
 }
 
 fn find_untranscribed_post(location: &Location) -> Result<Option<String>> {
@@ -122,8 +122,10 @@ fn find_unrevised_post(location: &Location) -> Result<Option<String>> {
         let props_file = fs::OpenOptions::new()
             .read(true)
             .open(&props_file_path)
+            .with_context(|| format!("Opening `{}` file", post_file::PROPS))?;
+        let has_target_line = file::file_contains_line(props_file, TARGET_LINE)
             .with_context(|| format!("Reading `{}` file", post_file::PROPS))?;
-        if !file::file_contains_line(props_file, TARGET_LINE)? {
+        if !has_target_line {
             return Ok(false);
         }
         Ok(false)

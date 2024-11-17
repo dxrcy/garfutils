@@ -195,7 +195,7 @@ pub fn revise(location: &Location, id: &str) -> Result<()> {
     println!("Moved {} to old directory", id);
 
     println!("(waiting until done...)");
-    file::wait_for_file(&post_path)?;
+    file::wait_for_file(&post_path);
 
     Ok(())
 }
