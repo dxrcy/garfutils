@@ -116,7 +116,7 @@ impl Location {
                     \t├─ {}\n\
                     \t└─ {}\n\
                 \n\
-                Alternatively, run this program with the `--location <LOCATION>` option.\
+                If the `--location` option wasn't provided, the default location `$XDG_DATA_HOME/garfutils` will be used.
             ",
             self.base_dir.to_string_lossy(),
             Self::SOURCE_DIR,
