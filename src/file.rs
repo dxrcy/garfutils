@@ -125,9 +125,22 @@ where
 }
 
 pub fn file_matches_string(file_path: impl AsRef<Path>, target: &str) -> io::Result<bool> {
-    // TODO(opt): This doesn't have to alloc a new String
-    let file_contents = fs::read_to_string(file_path)?;
-    Ok(file_contents == target)
+    let file = fs::OpenOptions::new().read(true).open(file_path)?;
+
+    let mut file_bytes = BufReader::new(file).bytes();
+    let mut target_bytes = target.bytes();
+
+    // Check for any mismatched bytes
+    let zipped = (&mut file_bytes).zip(&mut target_bytes);
+    for (fb, tb) in zipped {
+        if fb? != tb {
+            return Ok(false);
+        }
+    }
+
+    // If either iterator is unexhausted, then lengths mismatch
+    let lengths_match = file_bytes.next().is_none() && target_bytes.next().is_none();
+    Ok(lengths_match)
 }
 
 pub fn file_contains_line(file: File, needle: &str) -> io::Result<bool> {
