@@ -23,7 +23,7 @@ mod constants {
         pub const PROPS: &str = "props";
         pub const SPECIAL: &str = "special";
     }
-    pub mod viewer_class {
+    pub mod window_name {
         pub const TRANSCRIBE: &str = "garfutils-transcribe";
         pub const SHOW: &str = "garfutils-show";
     }

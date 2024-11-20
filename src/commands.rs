@@ -6,12 +6,7 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 
-pub fn spawn_image_viewer(
-    paths: &[impl AsRef<OsStr>],
-    // TODO: Rename to `name`
-    class: &str,
-    fullscreen: bool,
-) -> Result<()> {
+pub fn spawn_image_viewer(paths: &[impl AsRef<OsStr>], name: &str, fullscreen: bool) -> Result<()> {
     let mut command = Command::new("swiv");
     if fullscreen {
         command.args([
@@ -20,7 +15,7 @@ pub fn spawn_image_viewer(
         ]);
     }
     command
-        .args(["-N", class]) // Window name (so it can be killed later)
+        .args(["-N", name]) // Window name (so it can be killed later)
         .args(["-B", "#000000"]) // Background color
         .args(paths)
         .spawn()
@@ -28,11 +23,10 @@ pub fn spawn_image_viewer(
     Ok(())
 }
 
-// TODO: Rename to `kill_process_name`
-pub fn kill_process_class(class: &str) -> Result<()> {
+pub fn kill_process_name(name: &str) -> Result<()> {
     Command::new("pkill")
         .arg("--full")
-        .arg(class)
+        .arg(name)
         .status()
         .with_context(|| "Killing image viewer")?;
     // Non-zero exit means no process found; not necessarily an error
@@ -53,9 +47,9 @@ pub fn open_editor(path: impl AsRef<OsStr>) -> Result<()> {
     Ok(())
 }
 
-/// BSPWM-specific functionality
-pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], viewer_class: &str) -> Result<()> {
-    spawn_image_viewer(paths, viewer_class, false)?;
+/// Hyprland-specific functionality
+pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str) -> Result<()> {
+    spawn_image_viewer(paths, window_name, false)?;
 
     // Wait for image viewer to completely start
     // TODO(fix): Spin until image viewer window has spawned

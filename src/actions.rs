@@ -41,8 +41,8 @@ pub fn show(location: &Location, date: Option<NaiveDate>) -> Result<()> {
     file::append_date(location.recent_file(), date)
         .with_context(|| "Appending date to recent dates file")?;
 
-    commands::kill_process_class(viewer_class::SHOW)?;
-    commands::spawn_image_viewer(&[path], viewer_class::SHOW, true)?;
+    commands::kill_process_name(window_name::SHOW)?;
+    commands::spawn_image_viewer(&[path], window_name::SHOW, true)?;
 
     Ok(())
 }
@@ -116,11 +116,11 @@ pub fn transcribe(location: &Location, id: &str) -> Result<()> {
     let initial_file_path = posts_dir.join(post_file::INITIAL);
     let duplicate_file_path = posts_dir.join(post_file::DUPLICATE);
 
-    commands::kill_process_class(viewer_class::TRANSCRIBE)?;
+    commands::kill_process_name(window_name::TRANSCRIBE)?;
 
     commands::setup_image_viewer_window(
         &[initial_file_path, duplicate_file_path],
-        viewer_class::TRANSCRIBE,
+        window_name::TRANSCRIBE,
     )?;
 
     let transcript_template = if transcript_file_path.exists() {
@@ -141,7 +141,7 @@ pub fn transcribe(location: &Location, id: &str) -> Result<()> {
 
     commands::open_editor(&temp_file_path)?;
 
-    commands::kill_process_class(viewer_class::TRANSCRIBE)?;
+    commands::kill_process_name(window_name::TRANSCRIBE)?;
 
     if file::file_matches_string(&temp_file_path, &transcript_template)
         .with_context(|| "Comparing transcript file against previous version")?
