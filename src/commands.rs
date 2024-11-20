@@ -55,7 +55,8 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str)
     // TODO(fix): Spin until image viewer window has spawned
     thread::sleep(Duration::from_millis(100));
 
-    // // Move image viewer to left, resize slightly, re-focus main window
+    // Move image viewer to left, resize slightly, re-focus main window
+    hyprctl_command(&["moveoutofgroup"])?;
     hyprctl_command(&["swapwindow", "l"])?;
     hyprctl_command(&["resizeactive", "-350", "0"])?;
     hyprctl_command(&["movefocus", "r"])?;
