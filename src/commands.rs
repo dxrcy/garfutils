@@ -8,25 +8,27 @@ use anyhow::{bail, Context, Result};
 
 pub fn spawn_image_viewer(
     paths: &[impl AsRef<OsStr>],
+    // TODO: Rename to `name`
     class: &str,
     fullscreen: bool,
 ) -> Result<()> {
-    let mut command = Command::new("nsxiv");
-    command.arg("--class").arg(class);
+    let mut command = Command::new("swiv");
     if fullscreen {
         command.args([
-            "--fullscreen",
-            "--scale-mode",
-            "f", // fit
+            "-f", // Fullscreen
+            "-s", "f", // Scale mode: fit
         ]);
     }
     command
+        .args(["-N", class]) // Window name (so it can be killed later)
+        .args(["-B", "#000000"]) // Background color
         .args(paths)
         .spawn()
         .with_context(|| "Spawning image viewer")?;
     Ok(())
 }
 
+// TODO: Rename to `kill_process_name`
 pub fn kill_process_class(class: &str) -> Result<()> {
     Command::new("pkill")
         .arg("--full")
