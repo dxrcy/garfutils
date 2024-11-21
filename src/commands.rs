@@ -69,10 +69,10 @@ fn hyprctl_command(args: &[impl AsRef<OsStr>]) -> Result<process::Output> {
         .arg("dispatch")
         .args(args)
         .output()
-        .with_context(|| format!("Run command `hypr dispatch {}`", stringify_args(args)))?;
+        .with_context(|| format!("Run command `hyprctl dispatch {}`", stringify_args(args)))?;
     if !output.status.success() {
         bail!(
-            "Command did not exit successfully: `hypr dispatch {}`",
+            "Command did not exit successfully: `hyprctl dispatch {}`",
             stringify_args(args)
         );
     }
