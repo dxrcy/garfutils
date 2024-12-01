@@ -18,7 +18,8 @@ fn main() -> Result<()> {
         }
 
         args::Command::Make { date, recent } => {
-            let date = names::get_date(&location, date, recent).with_context(|| "Parsing date")?;
+            let date =
+                names::get_make_date(&location, date, recent).with_context(|| "Parsing date")?;
             let name = names::generate_name(date);
             actions::make(&location, date, &name, false).with_context(|| "Generating post")?;
         }

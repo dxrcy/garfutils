@@ -49,33 +49,15 @@ pub fn get_show_date(
     }
 
     let random_date =
-        get_random_comic_date(location, sunday).with_context(|| "Finding random comic date")?;
+        get_random_date(location, sunday).with_context(|| "Finding random comic date")?;
     Ok(random_date)
 }
 
-// TODO(refactor): Move
-fn get_random_comic_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
-    let entry_predicate = |entry: &DirEntry| -> bool {
-        !sunday
-            || file::get_date_from_path(&entry.path())
-                .unwrap_or_else(|_| None)
-                .is_some_and(|date| date.weekday() == Weekday::Sun)
-    };
-
-    let path = file::get_random_directory_entry(&location.source_dir(), entry_predicate)
-        .with_context(|| "Reading source directory")?
-        .with_context(|| "No comics found")?
-        .path();
-
-    let date_opt = file::get_date_from_path(&path).with_context(|| "Parsing date from path")?;
-
-    date_opt.with_context(|| {
-        "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
-    })
-}
-
-// TODO(refactor): Rename to `get_make_date`
-pub fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
+pub fn get_make_date(
+    location: &Location,
+    date: Option<NaiveDate>,
+    recent: bool,
+) -> Result<NaiveDate> {
     if !recent {
         return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));
     }
@@ -124,6 +106,26 @@ pub fn read_date(location: &Location, id: &str) -> Result<NaiveDate> {
     let date = NaiveDate::parse_from_str(date_file.trim(), "%Y-%m-%d")
         .with_context(|| "Invalid date file for post")?;
     Ok(date)
+}
+
+fn get_random_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
+    let entry_predicate = |entry: &DirEntry| -> bool {
+        !sunday
+            || file::get_date_from_path(&entry.path())
+                .unwrap_or_else(|_| None)
+                .is_some_and(|date| date.weekday() == Weekday::Sun)
+    };
+
+    let path = file::get_random_directory_entry(&location.source_dir(), entry_predicate)
+        .with_context(|| "Reading source directory")?
+        .with_context(|| "No comics found")?
+        .path();
+
+    let date_opt = file::get_date_from_path(&path).with_context(|| "Parsing date from path")?;
+
+    date_opt.with_context(|| {
+        "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
+    })
 }
 
 fn get_recent_date(location: &Location) -> Result<NaiveDate> {
