@@ -111,12 +111,12 @@ pub fn read_date(location: &Location, id: &str) -> Result<NaiveDate> {
 fn get_random_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
     let entry_predicate = |entry: &DirEntry| -> bool {
         !sunday
-            || file::get_date_from_path(&entry.path())
-                .unwrap_or_else(|_| None)
+            || file::get_date_from_path(entry.path())
+                .unwrap_or(None)
                 .is_some_and(|date| date.weekday() == Weekday::Sun)
     };
 
-    let path = file::get_random_directory_entry(&location.source_dir(), entry_predicate)
+    let path = file::get_random_directory_entry(location.source_dir(), entry_predicate)
         .with_context(|| "Reading source directory")?
         .with_context(|| "No comics found")?
         .path();
