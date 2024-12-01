@@ -13,28 +13,11 @@ use anyhow::{bail, Context as _, Result};
 use chrono::NaiveDate;
 use rand::Rng as _;
 
-pub fn show(location: &Location, date: Option<NaiveDate>) -> Result<()> {
+pub fn show(location: &Location, date: NaiveDate) -> Result<()> {
     let source_dir = location.source_dir();
 
-    let (date, path) = match date {
-        Some(date) => {
-            let mut path = source_dir.join(date.to_string());
-            path.set_extension(SOURCE_FORMAT);
-            (date, path)
-        }
-        None => {
-            let path = file::get_random_directory_entry(&source_dir)
-                .with_context(|| "Reading source directory")?
-                .with_context(|| "No comics found")?
-                .path();
-            let date_opt =
-                file::get_date_from_path(&path).with_context(|| "Parsing date from path")?;
-            let date = date_opt.with_context(|| {
-                "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
-            })?;
-            (date, path)
-        }
-    };
+    let mut path = source_dir.join(date.to_string());
+    path.set_extension(SOURCE_FORMAT);
 
     println!("{}", date);
 

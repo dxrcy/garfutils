@@ -5,9 +5,11 @@ use crate::random;
 
 use std::fmt::Write as _;
 use std::fs;
+use std::fs::DirEntry;
 use std::path::Path;
 
 use anyhow::{bail, Context as _, Result};
+use chrono::Weekday;
 use chrono::{Datelike as _, NaiveDate};
 use rand::Rng as _;
 
@@ -33,6 +35,46 @@ pub fn generate_name(date: NaiveDate) -> String {
     name
 }
 
+pub fn get_show_date(
+    location: &Location,
+    date: Option<NaiveDate>,
+    sunday: bool,
+) -> Result<NaiveDate> {
+    if let Some(date) = date {
+        assert!(
+            !sunday,
+            "date should be `None` with `--sunday` (cli parsing is broken)"
+        );
+        return Ok(date);
+    }
+
+    let random_date =
+        get_random_comic_date(location, sunday).with_context(|| "Finding random comic date")?;
+    Ok(random_date)
+}
+
+// TODO(refactor): Move
+fn get_random_comic_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
+    let entry_predicate = |entry: &DirEntry| -> bool {
+        !sunday
+            || file::get_date_from_path(&entry.path())
+                .unwrap_or_else(|_| None)
+                .is_some_and(|date| date.weekday() == Weekday::Sun)
+    };
+
+    let path = file::get_random_directory_entry(&location.source_dir(), entry_predicate)
+        .with_context(|| "Reading source directory")?
+        .with_context(|| "No comics found")?
+        .path();
+
+    let date_opt = file::get_date_from_path(&path).with_context(|| "Parsing date from path")?;
+
+    date_opt.with_context(|| {
+        "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
+    })
+}
+
+// TODO(refactor): Rename to `get_make_date`
 pub fn get_date(location: &Location, date: Option<NaiveDate>, recent: bool) -> Result<NaiveDate> {
     if !recent {
         return Ok(date.expect("date should be `Some` without `--recent` (cli parsing is broken)"));

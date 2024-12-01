@@ -23,29 +23,53 @@ pub fn discard_read_line(reader: &mut impl Read) {
     }
 }
 
-pub fn get_random_directory_entry(dir: impl AsRef<Path>) -> Result<Option<DirEntry>> {
-    let count = count_dir_entries(&dir).with_context(|| "Counting directory entries")?;
+pub fn get_random_directory_entry<F>(
+    dir: impl AsRef<Path>,
+    predicate: F,
+) -> Result<Option<DirEntry>>
+where
+    F: FnMut(&DirEntry) -> bool + Copy,
+{
+    let count = count_dir_entries(&dir, predicate).with_context(|| "Counting directory entries")?;
     if count == 0 {
         return Ok(None);
     }
     let index = random::with_rng(|rng| rng.gen_range(0..count));
-    let entry = get_nth_dir_entry(&dir, index)?
+    let entry = get_nth_dir_entry(&dir, index, predicate)?
         .expect("generated index should refer to a valid directory entry");
     Ok(Some(entry))
 }
 
-fn get_nth_dir_entry(dir: impl AsRef<Path>, index: usize) -> Result<Option<DirEntry>> {
-    let mut entries = read_dir(dir)?;
+fn get_nth_dir_entry<F>(
+    dir: impl AsRef<Path>,
+    index: usize,
+    mut predicate: F,
+) -> Result<Option<DirEntry>>
+where
+    F: FnMut(&DirEntry) -> bool,
+{
+    let mut entries = read_dir(dir)?.filter(|result| {
+        let Ok(entry) = result else { return true };
+        predicate(entry)
+    });
     let Some(entry) = entries.nth(index) else {
         return Ok(None);
     };
     let entry = entry?;
+    println!("{}", entry.path().display());
     Ok(Some(entry))
 }
 
-fn count_dir_entries(dir: impl AsRef<Path>) -> Result<usize> {
+fn count_dir_entries<F>(dir: impl AsRef<Path>, mut predicate: F) -> Result<usize>
+where
+    F: FnMut(&DirEntry) -> bool,
+{
     let mut count = 0;
-    for entry in read_dir(&dir)? {
+    let entries = read_dir(dir)?.filter(|result| {
+        let Ok(entry) = result else { return true };
+        predicate(entry)
+    });
+    for entry in entries {
         entry?;
         count += 1;
     }

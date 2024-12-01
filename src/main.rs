@@ -11,7 +11,9 @@ fn main() -> Result<()> {
     let location = Location::from(args.location).with_context(|| "Parsing directory location")?;
 
     match args.command {
-        args::Command::Show { date } => {
+        args::Command::Show { date, sunday } => {
+            let date =
+                names::get_show_date(&location, date, sunday).with_context(|| "Parsing date")?;
             actions::show(&location, date).with_context(|| "Showing comic")?;
         }
 

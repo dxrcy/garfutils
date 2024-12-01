@@ -24,9 +24,14 @@ pub struct Args {
 pub enum Command {
     /// Display an original comic, given a date
     #[clap(alias = "s")]
+    #[clap(group(ArgGroup::new("show_group")))]
     Show {
         /// Date of the comic to display (defaults to a random date)
+        #[arg(group("show_group"))]
         date: Option<NaiveDate>,
+        /// Only show 'sunday' comics (for random date)
+        #[arg(short, long, group("show_group"))]
+        sunday: bool,
     },
 
     /// Create a new post, given a date
