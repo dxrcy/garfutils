@@ -1,6 +1,5 @@
 use crate::random;
 
-use std::cmp::Ordering;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead as _, BufReader, Read, Write as _};
 use std::path::Path;
@@ -29,53 +28,17 @@ pub fn get_random_directory_entry<F>(
     predicate: F,
 ) -> Result<Option<DirEntry>>
 where
-    F: FnMut(&DirEntry) -> bool + Copy,
-{
-    // TODO(feat): Use `read_dir_sorted`
-    let count = count_dir_entries(&dir, predicate).with_context(|| "Counting directory entries")?;
-    if count == 0 {
-        return Ok(None);
-    }
-    let index = random::with_rng(|rng| rng.gen_range(0..count));
-    let entry = get_nth_dir_entry(&dir, index, predicate)?
-        .expect("generated index should refer to a valid directory entry");
-    Ok(Some(entry))
-}
-
-fn get_nth_dir_entry<F>(
-    dir: impl AsRef<Path>,
-    index: usize,
-    mut predicate: F,
-) -> Result<Option<DirEntry>>
-where
     F: FnMut(&DirEntry) -> bool,
 {
-    let mut entries = read_dir(dir)?.filter(|result| {
-        let Ok(entry) = result else { return true };
-        predicate(entry)
-    });
-    let Some(entry) = entries.nth(index) else {
-        return Ok(None);
-    };
-    let entry = entry?;
-    println!("{}", entry.path().display());
-    Ok(Some(entry))
-}
+    let entries = read_dir(&dir)?.flatten().filter(predicate);
+    let mut entries = sort_dir_entries(entries.collect());
 
-fn count_dir_entries<F>(dir: impl AsRef<Path>, mut predicate: F) -> Result<usize>
-where
-    F: FnMut(&DirEntry) -> bool,
-{
-    let mut count = 0;
-    let entries = read_dir(dir)?.filter(|result| {
-        let Ok(entry) = result else { return true };
-        predicate(entry)
-    });
-    for entry in entries {
-        entry?;
-        count += 1;
+    if entries.len() == 0 {
+        return Ok(None);
     }
-    Ok(count)
+    let index = random::with_rng(|rng| rng.gen_range(0..entries.len()));
+    let entry = entries.swap_remove(index); // Get owned element in O(1) time
+    Ok(Some(entry))
 }
 
 /// Wrapper for `fs::read_dir` which provides context for some errors
@@ -86,13 +49,10 @@ pub fn read_dir(dir: impl AsRef<Path>) -> Result<impl Iterator<Item = Result<Dir
     Ok(entries)
 }
 
-/// Wrapper for [`read_dir`] which collects into a `Vec` and sorts by filename
-///
 /// Discards any `Err` entries
-pub fn read_dir_sorted(dir: impl AsRef<Path>) -> Result<Vec<DirEntry>> {
-    let mut entries: Vec<_> = read_dir(&dir)?.flatten().collect();
+pub fn sort_dir_entries(mut entries: Vec<DirEntry>) -> Vec<DirEntry> {
     entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-    Ok(entries)
+    entries
 }
 
 pub fn append_date(path: impl AsRef<Path>, date: NaiveDate) -> io::Result<()> {
@@ -140,7 +100,8 @@ pub fn find_child<F>(dir: impl AsRef<Path>, predicate: F) -> Result<Option<Strin
 where
     F: Fn(&Path) -> Result<bool>,
 {
-    for entry in read_dir_sorted(&dir)? {
+    let entries = sort_dir_entries(read_dir(&dir)?.flatten().collect());
+    for entry in entries {
         let path = entry.path();
 
         if !predicate(&path)? {
