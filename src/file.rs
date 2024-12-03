@@ -1,5 +1,6 @@
 use crate::random;
 
+use std::cmp::Ordering;
 use std::fs::{self, DirEntry, File};
 use std::io::{self, BufRead as _, BufReader, Read, Write as _};
 use std::path::Path;
@@ -30,6 +31,7 @@ pub fn get_random_directory_entry<F>(
 where
     F: FnMut(&DirEntry) -> bool + Copy,
 {
+    // TODO(feat): Use `read_dir_sorted`
     let count = count_dir_entries(&dir, predicate).with_context(|| "Counting directory entries")?;
     if count == 0 {
         return Ok(None);
@@ -84,6 +86,15 @@ pub fn read_dir(dir: impl AsRef<Path>) -> Result<impl Iterator<Item = Result<Dir
     Ok(entries)
 }
 
+/// Wrapper for [`read_dir`] which collects into a `Vec` and sorts by filename
+///
+/// Discards any `Err` entries
+pub fn read_dir_sorted(dir: impl AsRef<Path>) -> Result<Vec<DirEntry>> {
+    let mut entries: Vec<_> = read_dir(&dir)?.flatten().collect();
+    entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    Ok(entries)
+}
+
 pub fn append_date(path: impl AsRef<Path>, date: NaiveDate) -> io::Result<()> {
     let mut file = fs::OpenOptions::new()
         .create(true)
@@ -129,8 +140,7 @@ pub fn find_child<F>(dir: impl AsRef<Path>, predicate: F) -> Result<Option<Strin
 where
     F: Fn(&Path) -> Result<bool>,
 {
-    for entry in read_dir(&dir)? {
-        let entry = entry?;
+    for entry in read_dir_sorted(&dir)? {
         let path = entry.path();
 
         if !predicate(&path)? {
