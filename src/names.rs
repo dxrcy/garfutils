@@ -2,6 +2,7 @@ use crate::constants::*;
 use crate::file;
 use crate::location::Location;
 use crate::random;
+use crate::range::DateRange;
 
 use std::fmt::Write as _;
 use std::fs;
@@ -35,24 +36,38 @@ pub fn generate_name(date: NaiveDate) -> String {
     name
 }
 
-pub fn get_show_date(
-    location: &Location,
-    date: Option<NaiveDate>,
-    sunday: bool,
-) -> Result<NaiveDate> {
-    if let Some(date) = date {
-        assert!(
-            !sunday,
-            "date should be `None` with `--sunday` (cli parsing is broken)"
-        );
-        return Ok(date);
-    }
-
-    let random_date =
-        get_random_date(location, sunday).with_context(|| "Finding random comic date")?;
-    Ok(random_date)
+#[derive(Clone, Copy, Debug)]
+pub enum ShowInput {
+    Exact { date: NaiveDate },
+    Range { range: DateRange, sunday: bool },
+    Any { sunday: bool },
 }
 
+pub fn get_show_input(
+    date: Option<NaiveDate>,
+    range: Option<DateRange>,
+    sunday: bool,
+) -> ShowInput {
+    match (date, range, sunday) {
+        (Some(date), None, false) => ShowInput::Exact { date },
+        (None, Some(range), _) => ShowInput::Range { range, sunday },
+        (None, None, _) => ShowInput::Any { sunday },
+        _ => {
+            unreachable!("invalid argument combination (cli parsing is broken)");
+        }
+    }
+}
+
+pub fn get_show_date(location: &Location, input: ShowInput) -> Result<NaiveDate> {
+    let (range, sunday) = match input {
+        ShowInput::Exact { date } => return Ok(date),
+        ShowInput::Range { range, sunday } => (range, sunday),
+        ShowInput::Any { sunday } => (DateRange::all(), sunday),
+    };
+    get_random_date(location, range, sunday).with_context(|| "Finding random comic date")
+}
+
+// TODO(refactor): Create `get_make_input` similar to `get_show_input`
 pub fn get_make_date(
     location: &Location,
     date: Option<NaiveDate>,
@@ -108,12 +123,10 @@ pub fn read_date(location: &Location, id: &str) -> Result<NaiveDate> {
     Ok(date)
 }
 
-fn get_random_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
+fn get_random_date(location: &Location, range: DateRange, sunday: bool) -> Result<NaiveDate> {
     let entry_predicate = |entry: &DirEntry| -> bool {
-        !sunday
-            || file::get_date_from_path(entry.path())
-                .unwrap_or(None)
-                .is_some_and(|date| date.weekday() == Weekday::Sun)
+        let path = entry.path();
+        (path_in_date_range(&path, range)) && (!sunday || path_is_sunday(&path))
     };
 
     let path = file::get_random_directory_entry(location.source_dir(), entry_predicate)
@@ -126,6 +139,20 @@ fn get_random_date(location: &Location, sunday: bool) -> Result<NaiveDate> {
     date_opt.with_context(|| {
         "Found comic file with invalid name. Should contain date in YYYY-MM-DD format."
     })
+}
+
+fn path_is_sunday(path: impl AsRef<Path>) -> bool {
+    let Ok(Some(date)) = file::get_date_from_path(path) else {
+        return false;
+    };
+    date.weekday() == Weekday::Sun
+}
+
+fn path_in_date_range(path: impl AsRef<Path>, range: DateRange) -> bool {
+    let Ok(Some(date)) = file::get_date_from_path(path) else {
+        return false;
+    };
+    range.contains(date)
 }
 
 fn get_recent_date(location: &Location) -> Result<NaiveDate> {

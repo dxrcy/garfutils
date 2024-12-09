@@ -7,9 +7,11 @@ mod commands;
 mod file;
 mod location;
 mod random;
+mod range;
 
 pub use location::Location;
 pub use random::init_rng;
+pub use range::DateRange;
 
 mod constants {
     pub const SOURCE_FORMAT: &str = "png";

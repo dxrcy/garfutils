@@ -11,10 +11,15 @@ fn main() -> Result<()> {
     let location = Location::from(args.location).with_context(|| "Parsing directory location")?;
 
     match args.command {
-        args::Command::Show { date, sunday } => {
-            let date =
-                names::get_show_date(&location, date, sunday).with_context(|| "Parsing date")?;
-            actions::show(&location, date).with_context(|| "Showing comic")?;
+        args::Command::Show {
+            date,
+            sunday,
+            range,
+        } => {
+            let input = names::get_show_input(date, range, sunday);
+            let date = names::get_show_date(&location, input).with_context(|| "Parsing date")?;
+            println!("{:?}", date);
+            // actions::show(&location, date).with_context(|| "Showing comic")?;
         }
 
         args::Command::Make { date, recent } => {
