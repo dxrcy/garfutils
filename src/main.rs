@@ -18,8 +18,7 @@ fn main() -> Result<()> {
         } => {
             let input = names::get_show_input(date, range, sunday);
             let date = names::get_show_date(&location, input).with_context(|| "Parsing date")?;
-            println!("{:?}", date);
-            // actions::show(&location, date).with_context(|| "Showing comic")?;
+            actions::show(&location, date).with_context(|| "Showing comic")?;
         }
 
         args::Command::Make { date, recent } => {
