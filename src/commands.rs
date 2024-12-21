@@ -58,7 +58,7 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str)
     // Move image viewer to left, resize slightly, re-focus main window
     hyprctl_command(&["moveoutofgroup"])?;
     hyprctl_command(&["swapwindow", "l"])?;
-    hyprctl_command(&["resizeactive", "-250", "0"])?;
+    hyprctl_command(&["resizeactive", "-200", "0"])?;
     hyprctl_command(&["movefocus", "r"])?;
 
     Ok(())
