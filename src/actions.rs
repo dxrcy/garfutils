@@ -19,8 +19,6 @@ pub fn show(location: &Location, date: NaiveDate) -> Result<()> {
     let mut path = source_dir.join(date.to_string());
     path.set_extension(SOURCE_FORMAT);
 
-    println!("{}", date);
-
     file::append_date(location.recent_file(), date)
         .with_context(|| "Appending date to recent dates file")?;
 

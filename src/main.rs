@@ -15,10 +15,14 @@ fn main() -> Result<()> {
             date,
             sunday,
             range,
+            just_print,
         } => {
             let input = names::get_show_input(date, range, sunday);
             let date = names::get_show_date(&location, input).with_context(|| "Parsing date")?;
-            actions::show(&location, date).with_context(|| "Showing comic")?;
+            println!("{}", date);
+            if !just_print {
+                actions::show(&location, date).with_context(|| "Showing comic")?;
+            }
         }
 
         args::Command::Make { date, recent } => {

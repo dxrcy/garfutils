@@ -40,6 +40,9 @@ pub enum Command {
         /// Only show 'sunday' comics (for random date)
         #[arg(short, long, group("date_sunday"))]
         sunday: bool,
+        /// Only print the date, don't open image viewer
+        #[arg(short, long)]
+        just_print: bool,
     },
 
     /// Create a new post, given a date
