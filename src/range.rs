@@ -85,7 +85,7 @@ impl FromStr for DateRange {
         };
 
         if from > to {
-            return Err(format!("End date must be after start date"));
+            return Err("End date must be after start date".to_string());
         }
 
         Ok(Self { from, to })

@@ -33,7 +33,7 @@ where
     let entries = read_dir(&dir)?.flatten().filter(predicate);
     let mut entries = sort_dir_entries(entries.collect());
 
-    if entries.len() == 0 {
+    if entries.is_empty() {
         return Ok(None);
     }
     let index = random::with_rng(|rng| rng.gen_range(0..entries.len()));
@@ -51,7 +51,7 @@ pub fn read_dir(dir: impl AsRef<Path>) -> Result<impl Iterator<Item = Result<Dir
 
 /// Discards any `Err` entries
 pub fn sort_dir_entries(mut entries: Vec<DirEntry>) -> Vec<DirEntry> {
-    entries.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+    entries.sort_by_key(|a| a.file_name());
     entries
 }
 
