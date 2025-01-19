@@ -73,4 +73,11 @@ pub enum Command {
         /// Id of the post to recreate
         id: Option<String>,
     },
+
+    /// Copy/paste images and transcript to upload destination
+    #[clap(alias = "u")]
+    Upload {
+        /// Id of the post to upload
+        id: String,
+    },
 }

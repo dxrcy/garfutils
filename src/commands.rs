@@ -1,5 +1,7 @@
 use std::ffi::OsStr;
 use std::fmt::Write as _;
+use std::fs::File;
+use std::path::Path;
 use std::process::{self, Command, Stdio};
 use std::thread;
 use std::time::Duration;
@@ -60,6 +62,27 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str)
     hyprctl_command(&["swapwindow", "l"])?;
     hyprctl_command(&["resizeactive", "-200", "0"])?;
     hyprctl_command(&["movefocus", "r"])?;
+
+    Ok(())
+}
+
+/// Hyprland-specific functionality
+pub fn toggle_upload_destination() -> Result<()> {
+    hyprctl_command(&["togglespecialworkspace", "social"])?;
+    Ok(())
+}
+
+/// Hyprland-specific functionality
+pub fn upload_file(path: impl AsRef<Path>) -> Result<()> {
+    // Copy file contents to clipboard
+    let file = File::open(&path).with_context(|| "Opening file")?;
+    Command::new("wl-copy")
+        .stdin(file)
+        .status()
+        .with_context(|| "Copying file contents")?;
+
+    // Send 'paste' shortcut to application
+    hyprctl_command(&["sendshortcut", "CTRL,", "V,", "class:^(Ferdium)$"])?;
 
     Ok(())
 }

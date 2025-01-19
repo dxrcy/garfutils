@@ -46,6 +46,10 @@ fn main() -> Result<()> {
             confirm("Transcribe now?");
             actions::transcribe(&location, &id).with_context(|| "Transcribing post")?;
         }
+
+        args::Command::Upload { id } => {
+            actions::upload(&location, &id).with_context(|| "Uploading post")?;
+        }
     }
 
     Ok(())

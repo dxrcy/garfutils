@@ -182,6 +182,27 @@ pub fn revise(location: &Location, id: &str) -> Result<()> {
     Ok(())
 }
 
+pub fn upload(location: &Location, id: &str) -> Result<()> {
+    let post_path = location.posts_dir().join(id);
+
+    commands::toggle_upload_destination()?;
+
+    if let Err(error) = upload_files(post_path) {
+        // Close destination if upload failed
+        commands::toggle_upload_destination()?;
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+fn upload_files(dir: impl AsRef<Path>) -> Result<()> {
+    commands::upload_file(dir.as_ref().join("english.png"))?;
+    commands::upload_file(dir.as_ref().join("esperanto.png"))?;
+    commands::upload_file(dir.as_ref().join("transcript"))?;
+    Ok(())
+}
+
 /// Skips entries with missing or malformed date file
 fn exists_post_with_date(dir: impl AsRef<Path>, date: NaiveDate) -> Result<bool> {
     let entries = file::read_dir(&dir)?;
