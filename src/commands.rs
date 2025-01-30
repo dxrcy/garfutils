@@ -55,7 +55,7 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str)
 
     // Wait for image viewer to completely start
     // TODO(fix): Spin until image viewer window has spawned
-    thread::sleep(Duration::from_millis(200));
+    sleep(200);
 
     // Move image viewer to left, resize slightly, re-focus main window
     hyprctl_command(&["moveoutofgroup"])?;
@@ -64,6 +64,10 @@ pub fn setup_image_viewer_window(paths: &[impl AsRef<OsStr>], window_name: &str)
     hyprctl_command(&["movefocus", "r"])?;
 
     Ok(())
+}
+
+pub fn sleep(milliseconds: u64) {
+    thread::sleep(Duration::from_millis(milliseconds));
 }
 
 /// Hyprland-specific functionality
