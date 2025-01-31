@@ -200,6 +200,7 @@ fn upload_files(dir: impl AsRef<Path>) -> Result<()> {
     commands::upload_file(dir.as_ref().join("english.png"))?;
     commands::sleep(100);
     commands::upload_file(dir.as_ref().join("esperanto.png"))?;
+    commands::sleep(100);
     commands::upload_file(dir.as_ref().join("transcript"))?;
     Ok(())
 }
